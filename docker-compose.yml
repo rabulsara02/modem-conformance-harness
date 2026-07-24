@@ -1,0 +1,20 @@
+# docker-compose.yml — defines and runs BOTH containers together.
+# "docker compose up" reads this file, builds the images, starts every
+# service listed, and puts them on a shared private network so they can
+# reach each other by service name.
+
+services:
+  # The simulator container (the "modem").
+  sim:
+    build: .                      # Build from the Dockerfile in this folder.
+    command: python sim_stub.py   # Override the Dockerfile's default (pytest)
+                                  # so THIS container runs the server instead.
+
+  # The harness container (the "tester").
+  harness:
+    build: .
+    command: python harness_stub.py
+    depends_on:
+      - sim                       # Start "sim" first. Note: this waits for the
+                                  # container to START, not for the server to be
+                                  # READY — which is why harness_stub still sleeps.
