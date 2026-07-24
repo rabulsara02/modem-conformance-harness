@@ -388,7 +388,12 @@ git push
 - **Part B done.** Server runs (`listening on 0.0.0.0:5050`); manual `nc` test on
   5050 passed: `AT`→`OK`, `ATE0` cleaned echo, `HELLO`→`ERROR`, lowercase `at`→`OK`.
   Latency logged per command.
-- **Next:** Part C — write `test_simulator.py`, then Part D cleanup and Part E push.
+- **Part C done.** `test_simulator.py` written; 5 unit tests pass locally.
+- **Part D done.** Deleted `hello.py`/`test_hello.py`; Docker image rebuilt and
+  ran the 5 tests green inside the container.
+- **Part E done.** Committed and pushed; **CI green.** Also added
+  `LEARNING_NOTES.md` (repo root) and planning docs under `docs/`.
+- ✅ **DAY 3 COMPLETE.**
 
 ---
 
