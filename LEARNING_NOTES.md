@@ -182,6 +182,77 @@ engineering habit.
 
 ---
 
+## Day 5 — Finite state machines and network registration
+
+### The concepts
+
+**1. Finite state machine (FSM).** A fixed set of states; the system is in exactly
+one at a time; transitions move between them on events. Modem registration is a
+natural FSM (not registered / searching / registered / roaming / denied). We use
+one because it mirrors the standard, is directly testable, and makes illegal states
+impossible.
+
+**2. The real registration sequence.** SIM ready (`AT+CPIN?`) → radio on
+(`AT+CFUN=1`) → search & register (home or roaming) → check status (`AT+CREG?`) →
+attach packet/data service (`AT+CGATT=1`) → see operator (`AT+COPS?`). Note voice
+registration and data attach are *separate* steps.
+
+**3. The four commands + CREG codes.** CFUN sets functionality (1=radio on,
+0=off — the main driver). CREG reports status as `+CREG: <n>,<stat>`. CGATT
+attaches/detaches packet service. COPS gives the operator name.
+CREG stat codes: **0** not registered, **1** registered home, **2** searching,
+**3** denied, **4** unknown, **5** roaming.
+
+**4. Parsing AT command forms.** Extended commands have four forms by suffix:
+`=?` test, `?` read, `=value` write, bare = execute. Our `_parse_extended()`
+returns `(verb, form, value)` and handlers branch on the form.
+
+**5. Derived state vs stored state.** Don't store `reg_state` as an independent
+variable set by hand in many places (drifts out of sync). Store the *inputs*
+(`sim_ready`, `functionality`) and derive `reg_state` in one function
+(`_recompute_registration`). Single source of truth. Principle: "derive, don't
+duplicate."
+
+**6. Guard conditions.** Some transitions are illegal (attaching before
+registering). A guard (`if precondition not met: return ERROR`) rejects them, like
+real hardware. Modeling and testing illegal transitions *is* conformance testing —
+the most on-topic code in the project for test/validation roles.
+
+### Interview flashcards — Day 5
+
+- **Q: What's a finite state machine and why model registration as one?**
+  A: A model with a fixed set of states, one active at a time, and defined
+  transitions. Registration fits it exactly; an FSM makes the behavior testable and
+  makes invalid states unrepresentable.
+
+- **Q: Walk me through a modem registering on a network.**
+  A: Confirm the SIM is ready, turn the radio on (CFUN=1), the modem searches and
+  registers (home or roaming), you read status with CREG, then attach data service
+  with CGATT and can read the operator with COPS.
+
+- **Q: What does `+CREG: 0,1` mean? And `0,5`?**
+  A: The first number is the reporting mode; the second is the status — 1 =
+  registered on the home network, 5 = registered while roaming.
+
+- **Q: How do you prevent an illegal transition, like attaching before
+  registration?**
+  A: A guard condition: the CGATT=1 handler checks the state is REGISTERED/ROAMING
+  first and returns ERROR otherwise — mirroring real hardware.
+
+- **Q: Why derive the registration state instead of storing it?**
+  A: To keep a single source of truth. Storing it separately risks it drifting out
+  of sync with the inputs; deriving it in one place guarantees consistency.
+
+### Design decisions to be able to defend (Day 5)
+
+- **FSM with an `Enum`** for states (type-safe, self-documenting vs bare strings).
+- **Derived state** via `_recompute_registration` — single source of truth.
+- **Guard conditions** rejecting illegal transitions — the conformance mindset.
+- **A parser** turning AT forms into `(verb, form, value)`, extending the dispatch
+  table rather than replacing it.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -199,6 +270,6 @@ engineering habit.
 
 ---
 
-*Appended per day. Next up (Day 5): the registration state machine — how a modem
-moves from "SIM not ready" to "searching" to "registered," and the AT commands
-(CFUN, CGATT, COPS, CREG) that drive and report it.*
+*Appended per day. Next up (Day 6): the last commands (AT+CGDCONT PDP context,
+AT+CMEE error verbosity), hardening the server against malformed input, then
+FREEZING the simulator to pivot to the test harness.*

@@ -366,7 +366,10 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 4 COMPLETE.** Refactored `commands.py` to a dispatch table; added
+  identity commands (CGMI, CGMM, CIMI, CSQ) and SIM status (CPIN?). `server.py`
+  unchanged. 12 tests pass locally and in CI (green). `ModemState` gained
+  `sim_ready`, gating AT+CIMI — the seed for Day 5's registration logic.
 
 ---
 
