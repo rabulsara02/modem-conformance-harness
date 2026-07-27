@@ -15,7 +15,11 @@ that sells you for validation roles.
 
 ---
 
+
+
 ## Background knowledge (read before you build)
+
+
 
 ### 1. What YAML is, and why we use it for test plans
 
@@ -32,29 +36,31 @@ We define tests as **data** (YAML) rather than **code** (Python) on purpose. Thi
 is **data-driven testing**, and the payoff is big:
 
 - **Anyone can add a test** by editing YAML — no Python needed. A hardware engineer
-  who doesn't code can contribute test cases.
+who doesn't code can contribute test cases.
 - **The tests and the engine are separate.** One driver runs hundreds of cases;
-  adding a case never touches the driver.
+adding a case never touches the driver.
 - **Plans are portable and reviewable** — they read like a test specification, which
-  is exactly what a conformance test plan *is*.
+is exactly what a conformance test plan *is*.
 
 "I made the test cases declarative data so the plan is separate from the engine
 that runs it" is a strong design sentence for a test-engineering interview.
 
 ### 2. The schema we're designing
 
-Each **case** has these fields (only `name`, `send`, and one `expect*` are
+Each **case** has these fields (only `name`, `send`, and one `expect`* are
 required):
 
-| Field | Required | Meaning |
-|---|---|---|
-| `name` | yes | Human label, shown in reports |
-| `send` | yes | The AT command to send |
-| `expect` | one of | Substring the response must **contain** |
-| `expect_regex` | these two | Regex the response must **match** |
-| `timeout_ms` | no (def 2000) | How long to wait before failing |
-| `retries` | no (def 0) | How many times to retry on failure |
-| `precondition` | no (def none) | Commands to send first to set up state |
+
+| Field          | Required      | Meaning                                 |
+| -------------- | ------------- | --------------------------------------- |
+| `name`         | yes           | Human label, shown in reports           |
+| `send`         | yes           | The AT command to send                  |
+| `expect`       | one of        | Substring the response must **contain** |
+| `expect_regex` | these two     | Regex the response must **match**       |
+| `timeout_ms`   | no (def 2000) | How long to wait before failing         |
+| `retries`      | no (def 0)    | How many times to retry on failure      |
+| `precondition` | no (def none) | Commands to send first to set up state  |
+
 
 `expect` (substring) vs `expect_regex` (regex) covers both "the reply contains this
 text" and "the reply matches this pattern" (e.g. signal quality is
@@ -62,7 +68,7 @@ text" and "the reply matches this pattern" (e.g. signal quality is
 
 ### 3. `yaml.safe_load` vs `yaml.load` (a security habit)
 
-Always parse external YAML with **`yaml.safe_load`**, never `yaml.load`. Plain
+Always parse external YAML with `yaml.safe_load`, never `yaml.load`. Plain
 `load` can construct arbitrary Python objects encoded in the file — a remote-code
 risk if the file isn't fully trusted. `safe_load` only builds basic types (dicts,
 lists, strings, numbers). Knowing this distinction is a real security-awareness
@@ -73,25 +79,29 @@ signal.
 Notice the deliberate contrast with Day 6:
 
 - The **simulator** fails *gracefully* on bad input — it models a device receiving
-  hostile data and must never crash.
+hostile data and must never crash.
 - The **loader** fails *loudly* — if a test plan is malformed (missing `send`, no
-  `expect`), we `raise ValueError` with a clear message. A broken plan is a
-  *developer* error we want surfaced immediately, not swallowed.
+`expect`), we `raise ValueError` with a clear message. A broken plan is a
+*developer* error we want surfaced immediately, not swallowed.
 
 Matching the error strategy to the situation — graceful for untrusted input, loud
 for developer config — is a nuance worth being able to explain.
 
 ### 5. Two pytest features you'll meet today
 
-- **`pytest.raises(...)`** — asserts that a block *does* raise a given exception.
-  We use it to prove the loader rejects bad plans.
-- **`tmp_path`** — a pytest fixture that hands your test a fresh temporary
-  directory. We write a deliberately broken YAML file there and confirm the loader
-  rejects it, without cluttering the repo.
+- `pytest.raises(...)` — asserts that a block *does* raise a given exception.
+We use it to prove the loader rejects bad plans.
+- `tmp_path` — a pytest fixture that hands your test a fresh temporary
+directory. We write a deliberately broken YAML file there and confirm the loader
+rejects it, without cluttering the repo.
 
 ---
 
+
+
 ## Part A — Add PyYAML and build the loader
+
+
 
 ### 1. Add the dependency
 
@@ -108,6 +118,8 @@ Then install it into your venv:
 pip install -r requirements.txt
 ```
 
+
+
 ### 2. Create the harness package
 
 Make a new package folder with two files:
@@ -122,6 +134,8 @@ For `harness/__init__.py`:
 ```python
 """harness — reads declarative YAML test plans and runs them against a modem."""
 ```
+
+
 
 ### 3. Write `harness/testplan.py`
 
@@ -237,12 +251,14 @@ def load_plan(path) -> TestPlan:
 
 ---
 
+
+
 ## Part B — Write example test plans
 
 Create a `testplans/` folder with two example plans. These double as real,
 runnable test plans once the driver exists (Day 8).
 
-**`testplans/identity.yaml`:**
+`testplans/identity.yaml`**:**
 
 ```yaml
 name: Identity and info
@@ -269,7 +285,7 @@ cases:
     expect: "+CPIN: READY"
 ```
 
-**`testplans/registration.yaml`:**
+`testplans/registration.yaml`**:**
 
 ```yaml
 name: Registration state machine
@@ -304,6 +320,8 @@ Note: each case's `precondition` sets up the state it needs, so cases don't depe
 on run order. We'll finalize execution semantics (fresh state per case) on Day 8.
 
 ---
+
+
 
 ## Part C — Test the loader
 
@@ -385,6 +403,8 @@ pytest
 
 ---
 
+
+
 ## Part D — Docker sanity + push
 
 The Docker image installs `requirements.txt`, so PyYAML will be picked up
@@ -398,30 +418,39 @@ git push
 ```
 
 - ✅ **DAY 7 IS DONE when:** CI is green with 36 tests, and `load_plan` parses the
-  example plans and rejects malformed ones.
+example plans and rejects malformed ones.
 
 ---
+
+
 
 ## If something breaks
 
-- **`ModuleNotFoundError: No module named 'yaml'`:** PyYAML isn't installed — run
-  `pip install -r requirements.txt` in your venv (the package is imported as
-  `yaml` even though it's installed as `PyYAML`).
-- **`ModuleNotFoundError: No module named 'harness'`:** make sure
-  `harness/__init__.py` exists and you're running `pytest` from the repo root.
+- `ModuleNotFoundError: No module named 'yaml'`**:** PyYAML isn't installed — run
+`pip install -r requirements.txt` in your venv (the package is imported as
+`yaml` even though it's installed as `PyYAML`).
+- `ModuleNotFoundError: No module named 'harness'`**:** make sure
+`harness/__init__.py` exists and you're running `pytest` from the repo root.
 - **A YAML file "won't parse" / weird values:** YAML is indentation-sensitive (use
-  spaces, not tabs) and cares about quoting. Keep the AT commands quoted (`"AT"`),
-  especially regex strings.
-- **`test_regex_field_is_parsed` can't find the case:** the case `name` in the YAML
-  must exactly match the string in the test (`signal quality format`).
+spaces, not tabs) and cares about quoting. Keep the AT commands quoted (`"AT"`),
+especially regex strings.
+- `test_regex_field_is_parsed` **can't find the case:** the case `name` in the YAML
+must exactly match the string in the test (`signal quality format`).
 - **CI red, local green:** confirm `requirements.txt`, the `harness/` files,
-  `testplans/`, and `test_harness.py` were all committed.
+`testplans/`, and `test_harness.py` were all committed.
 
 ---
 
+
+
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 7 COMPLETE — harness foundation laid.** Added PyYAML; built the
+`harness/` package with a validating `load_plan()` loader, example plans under
+`testplans/`, and `test_harness.py`. 36 tests pass locally, in Docker, and in CI.
+- **Warning caught + fixed:** pytest tried to collect the `TestCase`/`TestPlan`
+dataclasses (Test* naming convention); opted them out with `__test__ = False`.
+- **Next:** review session (see `docs/REVIEW_01.md`), then Day 8's driver.
 
 ---
 

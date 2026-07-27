@@ -384,6 +384,79 @@ fresh temp directory to write throwaway (bad) files for negative tests.
 
 ---
 
+## Day 8 — Transport interface, fixtures, and running the plans
+
+### The concepts
+
+**1. Program to an interface (dependency inversion).** The driver talks to an
+abstract `Transport` (open/close/send), never to sockets directly. TCP is one
+implementation; serial (real hardware, Day 17) is another. Swapping hardware =
+one new Transport, zero driver changes. Architecture name: **port-and-adapter /
+hexagonal**.
+
+**2. Abstract base classes (`ABC` / `@abstractmethod`).** Declare a class that
+can't be instantiated and whose methods every subclass MUST implement — the
+language enforces the contract.
+
+**3. pytest fixtures.** Reusable setup a test depends on. A `yield` fixture does
+setup → hand value to test → teardown. Ours starts the simulator in a thread and
+shuts it down after.
+
+**4. Parametrization.** `@pytest.mark.parametrize` runs one test function once per
+input, each a separate result. We generate inputs from the YAML cases — data-driven
+testing pays off: add a case, get a test.
+
+**5. Unit vs integration.** Unit = logic in isolation (no sockets). Integration =
+real server + real socket + real transport working together (today's file).
+
+**6. Reading a full response from a stream.** No message boundaries over TCP, so
+`send()` reads until a final result code (OK/ERROR/+CME ERROR) or a timeout. Send
+`ATE0` first so echo doesn't clutter the reply.
+
+**7. Ephemeral port (0) + per-connection isolation.** Binding to port 0 lets the OS
+pick a free port (no conflicts, parallel-safe). Each test opens its own connection,
+and since modem state is per-connection, each test gets a fresh modem.
+
+### Interview flashcards — Day 8
+
+- **Q: How would you run these tests against a real modem instead of the
+  simulator?**
+  A: Write one new `Transport` implementation (serial instead of TCP). The driver
+  and the test plans don't change — that's why I programmed against a Transport
+  interface.
+
+- **Q: What is an abstract base class and why use one for Transport?**
+  A: A class that can't be instantiated and forces subclasses to implement its
+  methods. It makes "every transport has open/close/send" a rule Python enforces.
+
+- **Q: What's a pytest fixture, and what does yours do?**
+  A: Reusable setup/teardown a test depends on. Mine starts the simulator in a
+  background thread on an ephemeral port and tears it down after the tests.
+
+- **Q: How does one test function produce a pass/fail per YAML case?**
+  A: `@pytest.mark.parametrize` — I feed it every case loaded from the plans, so
+  pytest runs the function once per case with its own result line.
+
+- **Q: Unit vs integration test in your project?**
+  A: Unit tests call the command logic directly with no sockets; integration tests
+  start a real server and drive it over a real socket through the transport.
+
+- **Q: How do you read one complete modem response over TCP?**
+  A: Accumulate bytes and stop when a final result code line (OK/ERROR/+CME ERROR)
+  appears, bounded by a timeout — because TCP gives a stream with no message
+  boundaries.
+
+### Design decisions to be able to defend (Day 8)
+
+- **Transport interface** (dependency inversion) — the hardware-swap seam.
+- **In-process server fixture on an ephemeral port** — hermetic, parallel-safe, no
+  external process to start.
+- **Parametrize over YAML cases** — one readable pass/fail per case.
+- **Per-connection isolation** — reuse of the Day 3 state design for free test
+  isolation.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -401,6 +474,6 @@ fresh temp directory to write throwaway (bad) files for negative tests.
 
 ---
 
-*Appended per day. Next up: a REVIEW SESSION after Day 7, then Day 8 — the driver
-that runs these YAML plans against the simulator through a Transport interface (the
-seam that later swaps in real hardware).*
+*Appended per day. Next up (Day 9): make the runner robust — per-case timeouts and
+retry logic (using the `timeout_ms`/`retries` fields we already parse) and
+structured logging of every command.*
