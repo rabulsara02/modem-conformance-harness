@@ -57,7 +57,9 @@ class ModemState:
     functionality: int = 1      # AT+CFUN: 1=full (radio on), 0=minimum (radio off)
     creg_mode: int = 0          # AT+CREG reporting verbosity (the <n> value)
     attached: bool = False      # AT+CGATT packet-service attach state
-    reg_state: RegState = field(default=RegState.NOT_REGISTERED)
+    cmee_mode: int = 0          # AT+CMEE error verbosity: 0 plain, 1 numeric, 2 verbose
+    pdp_contexts: dict = field(default_factory=dict) # cid -> (pdp_type, apn)
+    reg_state: RegState = field(default=RegState.NOT_REGISTERED) 
 
     def __post_init__(self):
         # Derive the initial registration state from the initial inputs.
@@ -97,24 +99,38 @@ def _ok(info: str | None = None) -> str:
         return "OK"
     return f"{info}\r\n\r\nOK"
 
+def _format_error(state: ModemState) -> str:
+    """Format an error according to the modem's AT+CMEE verbosity setting.
+
+    Mode 0 -> "ERROR" (plain). Mode 1 -> "+CME ERROR: 100" (numeric).
+    Mode 2 -> "+CME ERROR: unknown" (verbose text). Centralizing this means
+    handlers just signal failure by returning the ERROR sentinel, and we decide
+    the wording here in one place.
+    """
+    if state.cmee_mode == 1:
+        return "+CME ERROR: 100"       # 100 = "unknown" in the standard's table
+    if state.cmee_mode == 2:
+        return "+CME ERROR: unknown"
+    return "ERROR"
+
 
 def _parse_extended(cmd: str):
     """Split an 'AT+...' command into (verb, form, value).
 
-    forms: 'test' (=?), 'write' (=value), 'read' (?), 'execute' (bare).
-    Returns None if `cmd` is not an extended (AT+) command.
+    The VERB is upper-cased (commands are case-insensitive), but the VALUE is
+    left as typed, because quoted arguments like an APN are case-sensitive data.
     """
-    if not cmd.startswith("AT+"):
+    if not cmd.upper().startswith("AT+"):
         return None
-    body = cmd[3:]                       # drop "AT+", e.g. "CFUN=1"
+    body = cmd[3:]                          # keep original case for values
     if body.endswith("=?"):
-        return (body[:-2], "test", None)
+        return (body[:-2].upper(), "test", None)
     if "=" in body:
         verb, value = body.split("=", 1)
-        return (verb, "write", value)
+        return (verb.upper(), "write", value)   # value case preserved
     if body.endswith("?"):
-        return (body[:-1], "read", None)
-    return (body, "execute", None)
+        return (body[:-1].upper(), "read", None)
+    return (body.upper(), "execute", None)
 
 
 # --- Basic command handlers (take only state) ------------------------------
@@ -227,6 +243,60 @@ def _cmd_cops(state, form, value):
         return _ok('+COPS: (2,"SimCorp Telecom","SimCorp","310150",7)')
     return ERROR
 
+def _cmd_cmee(state, form, value):
+    # Set/read error-report verbosity.
+    if form == "read":
+        return _ok(f"+CMEE: {state.cmee_mode}")
+    if form == "write":
+        if value in ("0", "1", "2"):
+            state.cmee_mode = int(value)
+            return _ok()
+        return ERROR
+    if form == "test":
+        return _ok("+CMEE: (0-2)")
+    return ERROR
+
+
+def _define_pdp_context(state, value):
+    """Parse and store one PDP context from an AT+CGDCONT write.
+
+    Expected value: <cid>,"<PDP_type>","<APN>"   e.g.  1,"IP","internet"
+    We validate every field and return ERROR on anything malformed rather than
+    raising — the "validate at the boundary" idea from the notes.
+    """
+    # Split on commas and strip spaces + surrounding quotes from each field.
+    parts = [p.strip().strip('"') for p in value.split(",")]
+    if len(parts) < 2:
+        return ERROR                          # need at least cid + type
+    cid_str, pdp_type = parts[0], parts[1].upper()
+    if not cid_str.isdigit():
+        return ERROR
+    cid = int(cid_str)
+    if not (1 <= cid <= 16):                   # standard allows contexts 1..16
+        return ERROR
+    if pdp_type not in ("IP", "IPV6", "IPV4V6"):
+        return ERROR
+    apn = parts[2] if len(parts) >= 3 else ""
+    state.pdp_contexts[cid] = (pdp_type, apn)
+    return _ok()
+
+
+def _cmd_cgdcont(state, form, value):
+    # Define / list PDP (data connection) contexts.
+    if form == "write":
+        return _define_pdp_context(state, value)
+    if form == "read":
+        if not state.pdp_contexts:
+            return _ok()                       # nothing defined yet -> just OK
+        lines = []
+        for cid in sorted(state.pdp_contexts):
+            pdp_type, apn = state.pdp_contexts[cid]
+            lines.append(f'+CGDCONT: {cid},"{pdp_type}","{apn}","",0,0')
+        return _ok("\r\n".join(lines))
+    if form == "test":
+        return _ok('+CGDCONT: (1-16),"IP",,,(0-1),(0-1)')
+    return ERROR
+
 
 # --- Dispatch tables --------------------------------------------------------
 
@@ -247,27 +317,44 @@ EXTENDED_COMMANDS = {
     "CREG": _cmd_creg,
     "CGATT": _cmd_cgatt,
     "COPS": _cmd_cops,
+    "CMEE": _cmd_cmee,
+    "CGDCONT": _cmd_cgdcont,
 }
 
 
 def handle_command(line: str, state: ModemState) -> str:
     """Return the response body for one AT command line.
 
-    Basic commands (AT, ATE0/1) are matched exactly. Extended (AT+...) commands
-    are parsed into (verb, form, value) and routed to their handler. Commands are
-    case-insensitive. Unknown commands return ERROR, like real hardware.
+    Basic commands match exactly; extended (AT+...) commands are parsed into
+    (verb, form, value) and routed. All errors are formatted per AT+CMEE. Any
+    unexpected exception in a handler is contained and turned into a modem error,
+    so one bad command can never take down the server (fault isolation).
+
+    Command keywords are case-insensitive, but argument VALUES keep their case
+    (e.g. an APN in AT+CGDCONT), so we do NOT uppercase the whole line.
     """
-    cmd = line.upper().strip()
+    stripped = line.strip()
+    upper = stripped.upper()
 
-    if cmd in BASIC_COMMANDS:
-        return BASIC_COMMANDS[cmd](state)
+    if upper in BASIC_COMMANDS:
+        return BASIC_COMMANDS[upper](state)
 
-    parsed = _parse_extended(cmd)
+    parsed = _parse_extended(stripped)         # original case in; parser upper-cases the verb
     if parsed is None:
-        return ERROR                     # not a basic or extended command
+        return _format_error(state)            # not a basic or extended command
     verb, form, value = parsed
 
     handler = EXTENDED_COMMANDS.get(verb)
     if handler is None:
-        return ERROR                     # unknown extended command
-    return handler(state, form, value)
+        return _format_error(state)            # unknown extended command
+
+    try:
+        result = handler(state, form, value)
+    except Exception:
+        # Defensive boundary: never let a handler bug crash the connection.
+        return _format_error(state)
+
+    # Handlers signal failure with the ERROR sentinel; format it per CMEE here.
+    if result == ERROR:
+        return _format_error(state)
+    return result

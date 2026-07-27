@@ -249,18 +249,22 @@ def _parse_extended(cmd: str):
 
     forms: 'test' (=?), 'write' (=value), 'read' (?), 'execute' (bare).
     Returns None if `cmd` is not an extended (AT+) command.
+
+    NOTE: the VERB is upper-cased (command keywords are case-insensitive), but the
+    VALUE is left exactly as typed, because quoted arguments like an APN are
+    case-sensitive data.
     """
-    if not cmd.startswith("AT+"):
+    if not cmd.upper().startswith("AT+"):
         return None
-    body = cmd[3:]                       # drop "AT+", e.g. "CFUN=1"
+    body = cmd[3:]                       # keep original case for values
     if body.endswith("=?"):
-        return (body[:-2], "test", None)
+        return (body[:-2].upper(), "test", None)
     if "=" in body:
         verb, value = body.split("=", 1)
-        return (verb, "write", value)
+        return (verb.upper(), "write", value)   # value case preserved
     if body.endswith("?"):
-        return (body[:-1], "read", None)
-    return (body, "execute", None)
+        return (body[:-1].upper(), "read", None)
+    return (body.upper(), "execute", None)
 
 
 # --- Basic command handlers (take only state) ------------------------------
@@ -400,15 +404,17 @@ def handle_command(line: str, state: ModemState) -> str:
     """Return the response body for one AT command line.
 
     Basic commands (AT, ATE0/1) are matched exactly. Extended (AT+...) commands
-    are parsed into (verb, form, value) and routed to their handler. Commands are
-    case-insensitive. Unknown commands return ERROR, like real hardware.
+    are parsed into (verb, form, value) and routed to their handler. Command
+    keywords are case-insensitive, but argument VALUES keep their original case
+    (so we don't uppercase the whole line). Unknown commands return ERROR.
     """
-    cmd = line.upper().strip()
+    stripped = line.strip()
+    upper = stripped.upper()
 
-    if cmd in BASIC_COMMANDS:
-        return BASIC_COMMANDS[cmd](state)
+    if upper in BASIC_COMMANDS:
+        return BASIC_COMMANDS[upper](state)
 
-    parsed = _parse_extended(cmd)
+    parsed = _parse_extended(stripped)   # original case in; parser upper-cases the verb
     if parsed is None:
         return ERROR                     # not a basic or extended command
     verb, form, value = parsed
@@ -579,7 +585,11 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 5 COMPLETE.** Added the registration finite state machine (RegState
+  enum + derived `_recompute_registration`), the AT command form parser
+  (`_parse_extended`), and CFUN/CREG/CGATT/COPS. `server.py` unchanged. Power-on
+  sequence verified by hand (including the CGATT-before-registered ERROR guard).
+  23 tests pass locally, in Docker, and in CI (green). Committed and pushed.
 
 ---
 

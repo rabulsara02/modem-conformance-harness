@@ -141,3 +141,44 @@ def test_cops_shows_no_operator_when_not_registered():
 def test_cfun_read_reports_level():
     state = ModemState()
     assert "+CFUN: 1" in handle_command("AT+CFUN?", state)
+
+# --- Day 6: PDP context, CMEE error verbosity, and robustness --------------
+
+def test_define_and_read_pdp_context():
+    state = ModemState()
+    assert handle_command('AT+CGDCONT=1,"IP","internet"', state) == "OK"
+    body = handle_command("AT+CGDCONT?", state)
+    assert '+CGDCONT: 1,"IP","internet"' in body
+
+
+def test_pdp_context_rejects_bad_cid():
+    state = ModemState()
+    assert handle_command('AT+CGDCONT=99,"IP","x"', state) == "ERROR"
+
+
+def test_cmee_verbose_changes_error_wording():
+    state = ModemState()
+    assert handle_command("AT+BOGUS", state) == "ERROR"        # mode 0
+    handle_command("AT+CMEE=2", state)
+    assert handle_command("AT+BOGUS", state) == "+CME ERROR: unknown"
+
+
+def test_cmee_numeric_error():
+    state = ModemState()
+    handle_command("AT+CMEE=1", state)
+    assert handle_command("AT+BOGUS", state) == "+CME ERROR: 100"
+
+
+def test_cmee_read_reports_mode():
+    state = ModemState()
+    handle_command("AT+CMEE=2", state)
+    assert "+CMEE: 2" in handle_command("AT+CMEE?", state)
+
+
+def test_malformed_input_never_crashes():
+    # None of these should raise; each returns a clean error string.
+    state = ModemState()
+    for junk in ["", "   ", "AT+", "AT+CFUN=", "###", "AT+CGDCONT=", "random text"]:
+        result = handle_command(junk, state)
+        assert isinstance(result, str)        # got a string back, no exception
+        assert result in ("ERROR", "OK") or result.startswith("+")

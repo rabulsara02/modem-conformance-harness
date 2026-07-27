@@ -253,6 +253,74 @@ the most on-topic code in the project for test/validation roles.
 
 ---
 
+## Day 6 — PDP context, error verbosity, and defensive programming
+
+### The concepts
+
+**1. PDP context (`AT+CGDCONT`).** A modem's definition of a data connection:
+a **cid** (id), a PDP type (IPv4/IPv6), and an **APN** (Access Point Name — the
+gateway into a carrier's data network). `AT+CGDCONT=1,"IP","internet"` defines it;
+`AT+CGDCONT?` lists defined contexts. It sits on top of registration to enable a
+data session.
+
+**2. Error verbosity (`AT+CMEE`).** The same failure, three ways: mode 0 → `ERROR`,
+mode 1 → `+CME ERROR: 100` (numeric), mode 2 → `+CME ERROR: unknown` (text).
+Harnesses often set `CMEE=2` for legible failures. Implementing it forced errors to
+be *formatted* from a central helper instead of a hard-coded string.
+
+**3. Defensive programming / robustness.** A device (or simulator) under test gets
+malformed input on purpose and must never crash. Two ideas: **validate at the
+boundary** (check the cid is numeric and in range before using it) and **fault
+isolation** (wrap handler calls so one bug becomes a modem `ERROR`, not a dead
+connection). This is the tester's mindset made concrete.
+
+**4. Scope discipline / freezing.** The simulator is scaffolding; we froze it at
+~14 commands so effort shifts to the fault-classification work that differentiates
+the project. Deliberately capping scope — and explaining why — is a maturity signal.
+
+### Interview flashcards — Day 6
+
+- **Q: What's a PDP context / APN?**
+  A: A PDP context is the modem's definition of a data connection — an id, IP type,
+  and an APN, which is the named gateway into the carrier's data network.
+
+- **Q: What does AT+CMEE do?**
+  A: Sets error-report verbosity: plain `ERROR`, numeric `+CME ERROR: <code>`, or
+  verbose `+CME ERROR: <text>`. Test harnesses use verbose mode for readable
+  failures.
+
+- **Q: How do you make sure malformed input doesn't crash your server?**
+  A: Validate inputs at the boundary before using them, and wrap command handling
+  in a try/except so an unexpected error becomes a clean error response instead of
+  taking down the connection.
+
+- **Q: Why did you stop adding features to the simulator?**
+  A: It's scaffolding for the harness. More simulator features have diminishing
+  value; the differentiating work is fault injection and classification, so I froze
+  scope and moved on.
+
+- **Q: Why did the modem print my command back to me over `nc`?**
+  A: That's command echo (ATE1, on by default) — the modem repeats each command
+  before replying. The terminal also shows what I type locally, so with echo on I
+  see it twice. `ATE0` turns the modem's echo off.
+
+- **Q: (Bug we hit) Your APN came back uppercased — why, and how did you fix it?**
+  A: `handle_command` was uppercasing the entire line, which is fine for the
+  case-insensitive command keyword but wrong for a quoted argument like the APN.
+  Fix: uppercase only the verb, and leave argument values as typed. Lesson:
+  in a protocol, keywords are case-insensitive but string *data* is case-sensitive.
+
+### Design decisions to be able to defend (Day 6)
+
+- **Centralized error formatting** (`_format_error`) driven by CMEE — handlers just
+  signal failure, wording is decided in one place.
+- **Boundary validation + fault isolation** so the server survives garbage input.
+- **Case handling:** normalize the command keyword, preserve argument values —
+  keywords are case-insensitive, quoted data is not.
+- **Freezing the simulator** to protect time for the high-value harness work.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -270,6 +338,6 @@ the most on-topic code in the project for test/validation roles.
 
 ---
 
-*Appended per day. Next up (Day 6): the last commands (AT+CGDCONT PDP context,
-AT+CMEE error verbosity), hardening the server against malformed input, then
-FREEZING the simulator to pivot to the test harness.*
+*Appended per day. Next up (Day 7): Phase 2 begins — the conformance harness. A
+YAML test-plan format and a pytest driver that reads it and drives the simulator
+through a Transport interface (the seam that later swaps in real hardware).*
