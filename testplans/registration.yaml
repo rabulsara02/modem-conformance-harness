@@ -1,0 +1,24 @@
+name: Registration state machine
+description: Radio on/off and packet-attach transitions.
+cases:
+  - name: registered on home network by default
+    send: "AT+CREG?"
+    expect: "+CREG: 0,1"
+
+  - name: radio off deregisters
+    precondition:
+      - "AT+CFUN=0"
+    send: "AT+CREG?"
+    expect: "+CREG: 0,0"
+
+  - name: cannot attach while not registered
+    precondition:
+      - "AT+CFUN=0"
+    send: "AT+CGATT=1"
+    expect: "ERROR"
+
+  - name: attach succeeds once registered
+    precondition:
+      - "AT+CFUN=1"
+    send: "AT+CGATT=1"
+    expect: "OK"

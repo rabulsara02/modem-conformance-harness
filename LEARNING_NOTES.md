@@ -321,6 +321,69 @@ the project. Deliberately capping scope — and explaining why — is a maturity
 
 ---
 
+## Day 7 — Declarative test plans (YAML) and the harness
+
+### The concepts
+
+**1. Data-driven testing.** Define tests as *data* (YAML) instead of *code*. One
+engine (the driver) runs many cases; adding a case means editing YAML, not Python.
+Benefits: non-programmers can contribute tests, plan and engine are decoupled, and
+the plan reads like a conformance spec.
+
+**2. YAML.** A human-readable data format — indentation instead of braces. Great for
+config and test definitions because it's easy to read and review.
+
+**3. The schema.** Each case: `name`, `send`, and one of `expect` (substring) /
+`expect_regex` (regex); optional `timeout_ms`, `retries`, `precondition`. Regex
+covers pattern responses like `+CSQ: <digits>,<digits>`.
+
+**4. `yaml.safe_load` vs `yaml.load`.** Always `safe_load` external files — plain
+`load` can construct arbitrary Python objects (code-execution risk). `safe_load`
+builds only basic types.
+
+**5. Match error strategy to the situation.** Simulator = fail *gracefully* (models
+untrusted device input, never crash). Loader = fail *loudly* (`raise ValueError` on
+a malformed plan, because that's a developer error to surface immediately).
+
+**6. pytest tools.** `pytest.raises(Exc)` asserts a block raises; `tmp_path` gives a
+fresh temp directory to write throwaway (bad) files for negative tests.
+
+### Interview flashcards — Day 7
+
+- **Q: Why did you make test cases YAML data instead of Python code?**
+  A: Data-driven testing — the plan is separate from the engine, non-coders can add
+  cases, and the plan reads like a test specification. One driver runs them all.
+
+- **Q: Why `yaml.safe_load` and not `yaml.load`?**
+  A: `load` can instantiate arbitrary Python objects from the file (a code-execution
+  risk); `safe_load` only produces basic types. Use safe_load on any external file.
+
+- **Q: Your simulator swallows bad input but your loader raises on it — why the
+  difference?**
+  A: They're different situations. The simulator models a device receiving hostile
+  input and must stay up. A malformed test plan is a developer mistake I want to fail
+  fast and loudly so it's fixed immediately.
+
+- **Q: How do you test that code correctly rejects bad input?**
+  A: With `pytest.raises` — assert the call raises the expected exception — feeding
+  it a deliberately broken input built in a `tmp_path` temp directory.
+
+- **Q: (Warning we hit) pytest complained it couldn't collect your `TestPlan`
+  class — why?**
+  A: pytest auto-collects any class named `Test*` as a test class. My domain models
+  `TestCase`/`TestPlan` matched that convention by accident. Setting
+  `__test__ = False` on them opts them out. (Lesson: pytest discovers `test_*`
+  functions and `Test*` classes by naming convention.)
+
+### Design decisions to be able to defend (Day 7)
+
+- **Declarative YAML plans** — data-driven, decoupled from the driver.
+- **`safe_load`** for security.
+- **Loud validation** with located error messages (contrasts with the simulator).
+- **`expect` + `expect_regex`** to support both substring and pattern matching.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -338,6 +401,6 @@ the project. Deliberately capping scope — and explaining why — is a maturity
 
 ---
 
-*Appended per day. Next up (Day 7): Phase 2 begins — the conformance harness. A
-YAML test-plan format and a pytest driver that reads it and drives the simulator
-through a Transport interface (the seam that later swaps in real hardware).*
+*Appended per day. Next up: a REVIEW SESSION after Day 7, then Day 8 — the driver
+that runs these YAML plans against the simulator through a Transport interface (the
+seam that later swaps in real hardware).*

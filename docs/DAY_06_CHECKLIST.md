@@ -386,7 +386,15 @@ is the actual product: the **conformance harness**.
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 6 COMPLETE — Phase 1 (simulator) done.** Added CGDCONT (PDP context) and
+  CMEE (error verbosity), centralized error formatting, boundary validation + fault
+  isolation (malformed input never crashes). Documented the frozen 14-command set
+  in the README. 29 tests pass locally, in Docker, and in CI (green).
+- **Bug caught + fixed during Part B:** whole-line uppercasing was mangling the APN
+  value; fixed to normalize only the command keyword and preserve argument case.
+- **Cleanliness pass:** trimmed `requirements.txt` to the direct dependency
+  (`pytest`) and aligned CI Python to 3.13 to match local + Docker.
+- **Simulator is FROZEN** — only fault injection (Day 12) changes it now.
 
 ---
 

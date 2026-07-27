@@ -1,0 +1,22 @@
+name: Identity and info
+description: Basic identity, SIM, and signal queries.
+cases:
+  - name: attention responds OK
+    send: "AT"
+    expect: "OK"
+
+  - name: manufacturer identification
+    send: "AT+CGMI"
+    expect: "SimCorp"
+
+  - name: model identification
+    send: "AT+CGMM"
+    expect: "SC-LTE-100"
+
+  - name: signal quality format
+    send: "AT+CSQ"
+    expect_regex: '\+CSQ: \d+,\d+'
+
+  - name: SIM reports ready
+    send: "AT+CPIN?"
+    expect: "+CPIN: READY"
