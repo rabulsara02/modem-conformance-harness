@@ -182,3 +182,14 @@ def test_malformed_input_never_crashes():
         result = handle_command(junk, state)
         assert isinstance(result, str)        # got a string back, no exception
         assert result in ("ERROR", "OK") or result.startswith("+")
+
+
+def test_fault_command_sets_mode():
+    state = ModemState()
+    assert handle_command("AT+FAULT=delay", state) == "OK"
+    assert state.fault_mode == "delay"
+
+
+def test_fault_command_rejects_unknown_mode():
+    state = ModemState()
+    assert handle_command("AT+FAULT=bogus", state) == "ERROR"

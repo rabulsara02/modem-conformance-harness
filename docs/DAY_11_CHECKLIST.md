@@ -342,7 +342,14 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 11 COMPLETE — Phase 2 (harness) essentially done.** Grew the suite to 21
+  cases across identity/registration/PDP/errors, balancing positive and negative
+  tests. Extracted `run_plan` (DRY). 66 tests green in CI; live run reports 21/21.
+- **Two lessons caught live:** (1) a brittle exact-count assertion broke when the
+  plan grew — made it property-based. (2) A case passed under pytest (per-case
+  connection) but failed under the CLI (shared connection) because it wasn't
+  self-sufficient — added a `precondition`. That second one is a *harness* fault
+  (bad test setup), not a *device* fault — the exact distinction Day 12–13 is about.
 
 ---
 

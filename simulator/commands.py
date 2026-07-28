@@ -20,7 +20,7 @@ Command coverage:
 
 from dataclasses import dataclass, field
 from enum import Enum
-
+from simulator.faults import FAULT_MODES
 
 class RegState(Enum):
     """The finite set of network-registration states. The modem is always in
@@ -59,6 +59,7 @@ class ModemState:
     attached: bool = False      # AT+CGATT packet-service attach state
     cmee_mode: int = 0          # AT+CMEE error verbosity: 0 plain, 1 numeric, 2 verbose
     pdp_contexts: dict = field(default_factory=dict) # cid -> (pdp_type, apn)
+    fault_mode: str = "none"    # simulator only; injected fault mode (see faults.py)
     reg_state: RegState = field(default=RegState.NOT_REGISTERED) 
 
     def __post_init__(self):
@@ -297,6 +298,17 @@ def _cmd_cgdcont(state, form, value):
         return _ok('+CGDCONT: (1-16),"IP",,,(0-1),(0-1)')
     return ERROR
 
+def _cmd_fault(state, form, value):
+    # SIMULATOR-ONLY test hook (NOT a real AT command): choose the injected-fault
+    # mode. Effect is applied to later responses by server.py via faults.apply_fault.
+    if form == "read":
+        return _ok(f"+FAULT: {state.fault_mode}")
+    if form == "write":
+        if value in FAULT_MODES:
+            state.fault_mode = value
+            return _ok()
+        return ERROR
+    return ERROR
 
 # --- Dispatch tables --------------------------------------------------------
 
@@ -319,6 +331,7 @@ EXTENDED_COMMANDS = {
     "COPS": _cmd_cops,
     "CMEE": _cmd_cmee,
     "CGDCONT": _cmd_cgdcont,
+    "FAULT": _cmd_fault,
 }
 
 

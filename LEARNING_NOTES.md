@@ -642,6 +642,83 @@ for bugs to hide or changes to be missed.
 
 ---
 
+## Day 12 — Fault injection
+
+### The concepts
+
+**1. Fault injection / chaos engineering.** Deliberately introduce failures (delays,
+corrupt data, drops) to prove your detector detects, not just that the happy path
+works. Netflix's Chaos Monkey is the famous example. Here we inject modem faults to
+verify the *harness* catches them.
+
+**2. The fault taxonomy.** delay (slow firmware), malformed (corrupted serial data),
+dropout (crash/unplug), wrongstate (firmware that lies "OK"). Each mimics a real
+modem failure and produces a different observable.
+
+**3. Test hooks/backdoors.** `AT+FAULT` is a simulator-only control command, not real
+AT. Keep test hooks obviously separate from production behavior so they're never
+mistaken for conformance.
+
+**4. Faults at the boundary.** Applied in `server.py` (delivery layer), not
+`commands.py` (the model stays faithful). The fault-setting command is answered
+honestly by capturing the mode *before* handling it (same trick as echo).
+
+**5. `conftest.py`.** pytest auto-loads fixtures from `conftest.py` for all test
+files — the idiomatic place for shared fixtures (like the server fixture the
+integration and fault tests both use).
+
+**6. Sets up classification (Day 13).** Producing faults on demand is what lets the
+harness learn to tell a device fault from a timeout from a harness fault.
+
+### Interview flashcards — Day 12
+
+- **Q: What is fault injection and why did you add it?**
+  A: Deliberately making the device fail on command, so I can prove the harness
+  actually detects failures — you can't trust a detector you've only run on the
+  happy path. It's the chaos-engineering idea applied to a modem.
+
+- **Q: What kinds of faults, and why those?**
+  A: Delay, malformed response, dropout, and a lying "always-OK" mode — each mirrors
+  a real modem failure (slow firmware, corrupted serial, crash, buggy state
+  reporting) and each looks different to the harness.
+
+- **Q: `AT+FAULT` isn't a real AT command — is that a problem?**
+  A: No — it's a clearly-labeled, simulator-only test hook, kept separate from
+  conformance behavior and never used in a real test plan.
+
+- **Q: Why apply faults in the server, not the command logic?**
+  A: Faults are about how the response is delivered (late/garbled/dropped/wrong), so
+  they belong at the delivery boundary; the command model stays a faithful reference.
+
+- **Q: What is conftest.py?**
+  A: A file pytest auto-loads to share fixtures across all test files without
+  importing — I put the simulator-server fixture there.
+
+- **Q: (Observed live) You switched fault modes and the switch command itself came
+  back corrupted — bug?**
+  A: No — the `fault_before` design applies the *currently active* fault to this
+  command's outgoing response, and the *new* fault only affects later commands.
+  Consequence: to switch cleanly, send `AT+FAULT=none` first. It's the same
+  "capture state before handling" rule that keeps echo/fault-set commands faithful.
+
+- **Q: (Debugging lesson) Your code changes didn't take effect — how did you find
+  out why?**
+  A: Two tells: `pytest` (which starts a fresh in-process server) isolated code
+  correctness from a stale long-running server on the port; and the *log format*
+  in the output didn't match my latest code, proving the running process was old /
+  the file wasn't saved. When behavior ≠ code, first confirm you're running the code
+  you think you are.
+
+### Design decisions to be able to defend (Day 12)
+
+- **Fault injection as a labeled, simulator-only hook** (`AT+FAULT`), never in a
+  conformance plan.
+- **Faults at the server boundary**, command model stays faithful.
+- **`fault_before` capture** so the control command answers honestly (mirrors echo).
+- **Shared fixture in `conftest.py`** (DRY for test setup).
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -659,6 +736,6 @@ for bugs to hide or changes to be missed.
 
 ---
 
-*Appended per day. Next up (Day 12): the differentiator — FAULT INJECTION. Teach the
-simulator to misbehave on command (delays, malformed replies, dropouts, wrong-state
-answers) so the harness has real device faults to detect and classify.*
+*Appended per day. Next up (Day 13): the headline — the harness CLASSIFIES each
+failure (device fault vs timeout vs harness fault) and measures its own
+classification accuracy. That's the number the resume is built around.*
