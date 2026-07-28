@@ -14,7 +14,11 @@ tests, CI green.
 
 ---
 
+
+
 ## Background knowledge (read before you build)
+
+
 
 ### 1. Programming to an interface (the key idea)
 
@@ -58,9 +62,11 @@ pays off: add a YAML case, get a new test automatically.
 ### 5. Unit vs integration tests (you'll now have both)
 
 - `test_simulator.py` / `test_harness.py` = **unit** tests (logic in isolation, no
-  sockets).
+sockets).
 - Today's `test_integration.py` = **integration** tests: a real server, a real
-  socket, the real transport — the pieces working *together*.
+socket, the real transport — the pieces working *together*.
+
+
 
 ### 6. Reading a full response from a stream (framing, again)
 
@@ -69,7 +75,7 @@ A modem reply can be several lines and always ends with a **final result code**
 `send()` must **read until it sees a final result code** (or times out). Same
 "you impose the framing" lesson as Day 3, now on the reading side.
 
-We also send **`ATE0` first** to turn echo off, so responses aren't cluttered with
+We also send `ATE0` **first** to turn echo off, so responses aren't cluttered with
 the command echoed back.
 
 ### 7. Ephemeral ports (port 0) and test isolation
@@ -80,6 +86,8 @@ because the simulator keeps state **per connection** (a Day 3 decision), each te
 opening its own connection gets a **fresh modem** — clean isolation for free.
 
 ---
+
+
 
 ## Part A — The Transport interface + TCP implementation
 
@@ -177,6 +185,8 @@ class TcpTransport(Transport):
 
 ---
 
+
+
 ## Part B — The runner (execute one case, return a result)
 
 Create `harness/runner.py`:
@@ -235,6 +245,8 @@ def run_case(case, transport) -> CaseResult:
 - [ ] `harness/runner.py` created.
 
 ---
+
+
 
 ## Part C — Integration test: run every YAML case against a live simulator
 
@@ -315,26 +327,34 @@ pytest
 ```
 
 - ✅ *Worked when:* all pass — 36 from before + 9 parametrized integration cases
-  (5 identity + 4 registration) = **45 passed**. Try `pytest -v` to see each YAML
-  case listed by name.
+(5 identity + 4 registration) = **45 passed**. Try `pytest -v` to see each YAML
+case listed by name.
 
 ---
+
+
 
 ## Part D — See a failure on purpose (build intuition)
 
 Temporarily break one expectation to watch the harness catch it — this is the whole
 point of the tool.
 
-- [ ] In `testplans/identity.yaml`, change the manufacturer case's `expect` from
-      `"SimCorp"` to `"WrongCorp"`. Run `pytest -v`.
-- [ ] You should see exactly that one case FAIL, with a message showing the sent
-      command and the actual response. Everything else stays green.
-- [ ] Change it back to `"SimCorp"` and confirm `45 passed` again.
+- [x] In `testplans/identity.yaml`, change the manufacturer case's `expect` from
+  ```
+  `"SimCorp"` to `"WrongCorp"`. Run `pytest -v`.
+  ```
+- [x] You should see exactly that one case FAIL, with a message showing the sent
+  ```
+  command and the actual response. Everything else stays green.
+  ```
+- [x] Change it back to `"SimCorp"` and confirm `45 passed` again.
 
 This proves the harness reports *per-case* pass/fail with a useful diagnostic —
 the foundation for the reporting and fault-classification work later.
 
 ---
+
+
 
 ## Part E — Clean up the Day 2 stubs and wire compose to the real simulator
 
@@ -342,13 +362,13 @@ The Day 2 `sim_stub.py` / `harness_stub.py` are now superseded by the real
 transport and runner. Retire them, and point Docker Compose at the actual
 simulator so `docker compose up` launches something real.
 
-- [ ] Delete the stubs:
+- [x] Delete the stubs:
 
 ```bash
 rm sim_stub.py harness_stub.py
 ```
 
-- [ ] Replace `docker-compose.yml` with:
+- [x] Replace `docker-compose.yml` with:
 
 ```yaml
 # docker-compose.yml — run the real modem simulator in a container.
@@ -362,7 +382,7 @@ services:
       - "5050:5050"
 ```
 
-- [ ] Confirm it still comes up:
+- [x] Confirm it still comes up:
 
 ```bash
 docker compose up --build
@@ -370,6 +390,8 @@ docker compose up --build
 ```
 
 ---
+
+
 
 ## Part F — Docker sanity + push
 
@@ -381,41 +403,52 @@ git push
 ```
 
 - ✅ **DAY 8 IS DONE when:** CI is green with 45 tests, every YAML case runs against
-  the live simulator, and `docker compose up` starts the real simulator.
+the live simulator, and `docker compose up` starts the real simulator.
 
 ---
+
+
 
 ## If something breaks
 
-- **`Can't instantiate abstract class ... with abstract methods`:** your
-  `TcpTransport` is missing one of `open`/`close`/`send`, or a name is misspelled —
-  the ABC enforces all three.
+- `Can't instantiate abstract class ... with abstract methods`**:** your
+`TcpTransport` is missing one of `open`/`close`/`send`, or a name is misspelled —
+the ABC enforces all three.
 - **Integration test hangs then times out:** `_read_response` never saw a final
-  line. Check the command actually returns OK/ERROR, and that you sent `ATE0` (with
-  echo on, the echoed line can confuse matching for some cases).
-- **`ConnectionRefusedError`:** the fixture server didn't start, or you built
-  `TcpTransport` with the wrong host/port — use the `(host, port)` the fixture
-  yields.
+line. Check the command actually returns OK/ERROR, and that you sent `ATE0` (with
+echo on, the echoed line can confuse matching for some cases).
+- `ConnectionRefusedError`**:** the fixture server didn't start, or you built
+`TcpTransport` with the wrong host/port — use the `(host, port)` the fixture
+yields.
 - **A registration case fails:** remember each test is a fresh connection (fresh
-  state: SIM ready, radio on → registered). Preconditions must set up the state the
-  case needs.
-- **`git add .` missed the deletions:** use `git add -A` so the removed stubs are
-  staged too.
-- **`AttributeError: 'ThreadingTCPServer' object has no attribute 'close'` at
-  teardown:** the correct methods are `server.shutdown()` then
-  `server.server_close()` — `socketserver` uses `server_close()`, not `close()`.
-  (Tests still "pass" but the fixture teardown errors until you fix this.)
+state: SIM ready, radio on → registered). Preconditions must set up the state the
+case needs.
+- `git add .` **missed the deletions:** use `git add -A` so the removed stubs are
+staged too.
+- `AttributeError: 'ThreadingTCPServer' object has no attribute 'close'` **at
+teardown:** the correct methods are `server.shutdown()` then
+`server.server_close()` — `socketserver` uses `server_close()`, not `close()`.
+(Tests still "pass" but the fixture teardown errors until you fix this.)
 - **CI red, local green:** confirm `harness/transport.py`, `harness/runner.py`,
-  `test_integration.py`, and the new `docker-compose.yml` were all committed.
+`test_integration.py`, and the new `docker-compose.yml` were all committed.
 
 ---
 
+
+
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 8 COMPLETE — the harness runs.** Built the `Transport` interface +
+`TcpTransport`, the `run_case` runner, and integration tests that drive every
+YAML case against a live in-thread simulator via pytest parametrization. Retired
+the Day 2 stubs; `docker compose up` now launches the real simulator. 45 tests
+green in CI.
+- **Bug caught + fixed:** fixture teardown used `server.close()`; the correct
+`socketserver` method is `server_close()`. Tests passed but teardown errored —
+a reminder to read the full summary line, not just the pass count.
 
 ---
 
 *When CI is green with 45 tests, Day 8 is done — the harness now RUNS. Day 9 makes
-it robust: per-case timeouts and retry logic (using the `timeout_ms` and `retries`
-fields we already parse), plus structured logging of every command.*
+it robust: per-case timeouts and retry logic (using the* `timeout_ms` *and* `retries`
+*fields we already parse), plus structured logging of every command.*

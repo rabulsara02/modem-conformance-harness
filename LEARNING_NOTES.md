@@ -457,6 +457,65 @@ and since modem state is per-connection, each test gets a fresh modem.
 
 ---
 
+## Day 9 — Timeouts, retries, backoff, and test doubles
+
+### The concepts
+
+**1. Timeouts (deadline pattern).** Every wait is bounded — a hang blocks the whole
+run. We set a deadline (`now + timeout`) and never read past it; on the deadline,
+`send()` raises `TimeoutError`.
+
+**2. Retries — double-edged.** They hide *transient* failures (good) but can *mask
+real bugs* if used blindly. So we record the attempt count — "passes only on
+attempt 4 every time" is a failing case in disguise, and the metric exposes it.
+
+**3. Exponential backoff.** Wait longer before each retry (0.05 → 0.1 → 0.2s).
+Hammering a struggling device doesn't help; increasing breathing room does.
+Production adds random **jitter** so clients don't retry in lockstep.
+
+**4. Exceptions as control flow.** Normal path returns a response; no-response path
+raises `TimeoutError`; the runner catches it and decides to retry.
+
+**5. Test doubles / dependency injection.** Because the runner depends on the
+Transport *interface*, tests inject a `FakeTransport` programmed to fail/time out on
+cue — deterministic retry tests with no sockets. Stub = canned answers; mock = also
+asserts calls; fake = lightweight working substitute (ours).
+
+### Interview flashcards — Day 9
+
+- **Q: How do you keep a test from hanging on a dead device?**
+  A: Bounded waits via a deadline — if no complete response arrives in the case's
+  timeout, `send()` raises TimeoutError and the case is recorded as timed out.
+
+- **Q: Retries make flaky tests pass — isn't that dangerous?**
+  A: It can be. Retries should absorb transient blips, not hide persistent bugs, so
+  I record the attempt count. A case that only passes after several retries is
+  surfaced as suspect rather than silently green.
+
+- **Q: What is exponential backoff, and why jitter?**
+  A: Increasing the wait between retries so you don't hammer a struggling system;
+  jitter randomizes the waits so many clients don't retry simultaneously.
+
+- **Q: How did you test retry/timeout logic without a flaky real system?**
+  A: I injected a fake transport programmed to time out or fail on specific
+  attempts. The runner talks to the Transport interface, so swapping in a fake is
+  trivial — dependency injection.
+
+- **Q: Difference between a stub, a mock, and a fake?**
+  A: A stub returns canned responses; a mock also verifies how it was called; a fake
+  is a lightweight working implementation. My `FakeTransport` is a fake.
+
+### Design decisions to be able to defend (Day 9)
+
+- **Per-case timeout/retries from the plan** — behavior is data-driven config.
+- **Raise-and-catch TimeoutError** — clean separation of normal vs no-response
+  paths.
+- **Record attempts + timed_out** — retries stay honest and feed Day 12
+  classification.
+- **FakeTransport** — the interface enables deterministic tests of failure paths.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -474,6 +533,6 @@ and since modem state is per-connection, each test gets a fresh modem.
 
 ---
 
-*Appended per day. Next up (Day 9): make the runner robust — per-case timeouts and
-retry logic (using the `timeout_ms`/`retries` fields we already parse) and
-structured logging of every command.*
+*Appended per day. Next up (Day 10): metrics capture — every run emits a
+machine-readable summary (case counts, pass/fail, durations, retry counts): the
+numbers that become resume bullets.*

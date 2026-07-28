@@ -1,14 +1,23 @@
 """
-runner.py — Execute a single TestCase against a Transport and report the result.
+runner.py — Execute a TestCase against a Transport, with timeout + retry handling.
 
-Kept transport-agnostic: it calls transport.send(), never touching sockets. That's
-what lets the exact same runner drive the simulator today and real hardware later.
+Behavior:
+  - Each case uses its own timeout (timeout_ms) and retry budget (retries).
+  - A failed check OR a timeout consumes one attempt; we retry up to `retries`
+    extra times, waiting a little longer before each retry (exponential backoff).
+  - We record how many attempts it took and whether it ended in a timeout, so a
+    "passes only after N retries" case is visible, not hidden.
 
-(Per-case timeout and retries land on Day 9; today we run each case once.)
+Stays transport-agnostic (only calls transport.send), so the same runner drives the
+simulator, real hardware, or a fake transport in tests.
 """
 
+import logging
 import re
+import time
 from dataclasses import dataclass
+
+log = logging.getLogger("harness")
 
 
 @dataclass
@@ -18,11 +27,13 @@ class CaseResult:
     passed: bool
     sent: str
     response: str
-    reason: str = ""       # why it failed (empty if it passed)
+    attempts: int = 1          # how many tries it actually took
+    timed_out: bool = False    # did the final attempt end in a timeout?
+    reason: str = ""           # why it failed (empty if it passed)
 
 
 def _check(case, response: str):
-    """Return (passed, reason) by comparing the response to the case's expectation."""
+    """Return (passed, reason) comparing the response to the case's expectation."""
     if case.expect is not None:
         if case.expect in response:
             return True, ""
@@ -31,18 +42,42 @@ def _check(case, response: str):
         if re.search(case.expect_regex, response):
             return True, ""
         return False, f"regex {case.expect_regex!r} did not match"
-    return False, "case has no expectation"     # loader prevents this, but be safe
+    return False, "case has no expectation"
 
 
-def run_case(case, transport) -> CaseResult:
-    """Send any preconditions, then the command under test, then check the reply."""
-    # Preconditions set up state (e.g. AT+CFUN=0). We send and read each to keep
-    # the socket in sync, but ignore their responses.
+def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
+    """Run one case: preconditions, then send-and-check with retries + backoff."""
+    timeout = case.timeout_ms / 1000.0
+    max_attempts = case.retries + 1
+
+    # Preconditions set up state; best-effort (ignore their responses/timeouts).
     for pre in case.precondition:
-        transport.send(pre)
+        try:
+            transport.send(pre, timeout=timeout)
+        except TimeoutError:
+            log.warning("case=%r precondition %r timed out", case.name, pre)
 
-    response = transport.send(case.send)
-    passed, reason = _check(case, response)
-    return CaseResult(
-        name=case.name, passed=passed, sent=case.send, response=response, reason=reason
-    )
+    last_response, last_reason, timed_out = "", "", False
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = transport.send(case.send, timeout=timeout)
+            timed_out = False
+            passed, reason = _check(case, response)
+            last_response, last_reason = response, reason
+            log.info("case=%r attempt=%d/%d sent=%r passed=%s",
+                     case.name, attempt, max_attempts, case.send, passed)
+            if passed:
+                return CaseResult(case.name, True, case.send, response, attempts=attempt)
+        except TimeoutError as e:
+            timed_out = True
+            last_response, last_reason = "", str(e)
+            log.warning("case=%r attempt=%d/%d TIMEOUT sent=%r",
+                        case.name, attempt, max_attempts, case.send)
+
+        # Wait before the next attempt (exponential backoff), but not after the last.
+        if attempt < max_attempts:
+            time.sleep(backoff_base * (2 ** (attempt - 1)))
+
+    return CaseResult(case.name, False, case.send, last_response,
+                      attempts=max_attempts, timed_out=timed_out, reason=last_reason)

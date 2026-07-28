@@ -9,6 +9,7 @@ That swap-ability is the entire reason this abstraction exists.
 """
 
 import socket
+import time
 from abc import ABC, abstractmethod
 
 
@@ -28,8 +29,11 @@ class Transport(ABC):
         """Tear the connection down."""
 
     @abstractmethod
-    def send(self, command: str) -> str:
-        """Send one AT command and return the modem's full response text."""
+    def send(self, command: str, timeout: float = 2.0) -> str:
+        """Send one AT command and return the modem's full response text.
+        
+        Must raise TimeoutError if no complete response arrives within `timeout`.
+        """
 
 
 # Lines that mark the END of a modem response.
@@ -38,23 +42,29 @@ def _is_final_line(line: str) -> bool:
     return s in ("OK", "ERROR") or s.startswith("+CME ERROR") or s.startswith("+CMS ERROR")
 
 
-def _read_response(sock: socket.socket) -> str:
-    """Read from the socket until a final result code appears (or it times out).
+def _read_response(sock: socket.socket, timeout: float) -> str:
+    """Read until a final result code appears, or raise TimeoutError at the deadline.
 
-    TCP has no message boundaries, so we accumulate bytes and stop once we see a
-    line like OK / ERROR / +CME ERROR. On timeout we return what we have.
+    We compute a deadline (now + timeout) and, before each read, bound the socket's
+    wait by the time remaining. If the deadline passes with no complete response,
+    we raise TimeoutError instead of hanging.
     """
+    deadline = time.monotonic() + timeout
     buffer = ""
     while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"no complete response within {timeout:.2f}s")
+        sock.settimeout(remaining)
         try:
             chunk = sock.recv(4096)
         except socket.timeout:
-            break
+            raise TimeoutError(f"no complete response within {timeout:.2f}s")
         if not chunk:                          # peer closed the connection
             break
         buffer += chunk.decode(errors="replace")
         if any(_is_final_line(line) for line in buffer.splitlines()):
-            break
+            return buffer.strip()
     return buffer.strip()
 
 
@@ -77,9 +87,9 @@ class TcpTransport(Transport):
             self._sock.close()
             self._sock = None
 
-    def send(self, command: str) -> str:
+    def send(self, command: str, timeout: float = 2.0) -> str:
         if self._sock is None:
             raise RuntimeError("transport not open — call open() first")
         # The simulator frames on newline, so terminate the command with CRLF.
         self._sock.sendall((command + "\r\n").encode())
-        return _read_response(self._sock)
+        return _read_response(self._sock, timeout)
