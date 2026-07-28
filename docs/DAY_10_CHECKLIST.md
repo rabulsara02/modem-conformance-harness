@@ -402,7 +402,15 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 10 COMPLETE.** Added per-case latency, `report.py` (JSON summary
+  aggregation), and a `harness.run` CLI with argparse + exit codes. First live run:
+  `cases=9 passed=9 pass_rate=100.0% duration=1.62ms`, wrote `results/summary.json`.
+  53 tests green in Docker + CI.
+- **Bug caught + fixed:** the new field was named `duration` in `CaseResult` but
+  referenced as `duration_ms` in `run_case`/`report.py` — Python's "Did you mean
+  'duration'?" pinpointed it. Renamed to `duration_ms`.
+- **Git lesson:** committed `results/summary.json` before gitignoring it; `.gitignore`
+  doesn't untrack committed files, so used `git rm --cached` to stop tracking it.
 
 ---
 

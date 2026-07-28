@@ -15,7 +15,7 @@ from pathlib import Path
 
 from harness.testplan import load_plan
 from harness.transport import TcpTransport
-from harness.runner import run_case
+from harness.runner import run_case, run_plan
 from harness.report import build_summary, write_summary
 
 
@@ -40,9 +40,7 @@ def main(argv=None) -> int:
         transport = TcpTransport(args.host, args.port)
         transport.open()                       # one connection per plan
         try:
-            transport.send("ATE0")             # clean, echo-free responses
-            for case in plan.cases:
-                results.append(run_case(case, transport))
+            results.extend(run_plan(plan, transport)) # originally send ATE0 + loop by hand
         finally:
             transport.close()
 

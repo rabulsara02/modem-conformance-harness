@@ -87,3 +87,14 @@ def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
         timed_out=timed_out, duration_ms=(time.monotonic() - start) * 1000,
         reason=last_reason,
     )
+
+
+def run_plan(plan, transport):
+    """Run every case in `plan` over an already-open transport; return CaseResults.
+
+    Sends ATE0 first so the modem doesn't echo commands back and clutter responses.
+    This is the single place that knows how to run a whole plan — both the CLI and
+    any future caller use it instead of re-implementing the loop.
+    """
+    transport.send("ATE0")
+    return [run_case(case, transport) for case in plan.cases]

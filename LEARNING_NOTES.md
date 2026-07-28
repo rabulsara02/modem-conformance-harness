@@ -560,12 +560,85 @@ source — gitignore `results/`.
   A: Single responsibility — running a case, aggregating results, and orchestrating
   are different jobs; separating them keeps each testable and replaceable.
 
+- **Q: (Git gotcha) You added a file to `.gitignore` but it still shows in
+  `git status` / stayed on GitHub — why?**
+  A: `.gitignore` only stops *untracked* files from being staged; it doesn't untrack
+  something already committed. To stop tracking it while keeping the local copy:
+  `git rm --cached <file>`, then commit. Verify with `git ls-files <path>` (empty =
+  untracked).
+
 ### Design decisions to be able to defend (Day 10)
 
 - **JSON summary** for machine consumption + a human-readable printout.
 - **Exit codes** so the CLI integrates with CI/automation.
 - **runner / report / CLI separation** — single responsibility.
 - **gitignore generated `results/`** — outputs aren't source.
+
+---
+
+## Day 11 — Coverage, positive/negative testing, independence, DRY
+
+### The concepts
+
+**1. Coverage = breadth.** Exercise every feature area and the meaningful cases in
+each, not many variants of one easy path. We spread 21 cases across identity,
+registration, PDP, and errors so the pass rate reflects the whole modem.
+
+**2. Positive vs negative testing.** Positive = a valid action gives the right
+result; negative = an invalid action *fails correctly* (bad cid → ERROR, attach
+before register → ERROR). Conformance leans hard on negative cases — proving a
+device rejects what it should.
+
+**3. Test independence.** Each case sets up its own state via `precondition`, so
+order doesn't matter and a failure points at one thing. Independent tests can run in
+any order / parallel / alone.
+
+**4. DRY (don't repeat yourself).** Extracted the plan-run loop into one
+`run_plan()` so there's a single place that knows how to run a plan — fewer places
+for bugs to hide or changes to be missed.
+
+### Interview flashcards — Day 11
+
+- **Q: What's the difference between positive and negative testing, and why do
+  negative tests matter here?**
+  A: Positive checks a valid action succeeds; negative checks an invalid action
+  fails the right way. In conformance, proving a device correctly *rejects* bad
+  input is often the more important half.
+
+- **Q: How do you keep test cases independent?**
+  A: Each case sets up the state it needs in its preconditions, so it doesn't rely
+  on run order or leftovers — it can run alone, in any order, or in parallel.
+
+- **Q: How did you decide what to test?**
+  A: By feature area (identity, registration, data/PDP, errors) and by covering both
+  the happy path and the failure path in each, rather than piling up easy cases.
+
+- **Q: What does DRY mean and where did you apply it?**
+  A: Don't repeat yourself — I pulled the duplicated "run every case in a plan" loop
+  into a single `run_plan()` function used by the CLI.
+
+- **Q: (We hit this) A test broke because you added a test case — is the test
+  wrong?**
+  A: No — it was doing its job (a tripwire on the data's shape). But an exact-count
+  assertion is *brittle*: it breaks on every legitimate change. Better to assert on
+  properties you care about (a lower bound, or that a specific case exists) than a
+  hard-coded count.
+
+- **Q: (We hit this) The same test case passed under pytest but failed under the
+  live CLI — how is that possible?**
+  A: Different connection models. The integration test opens a fresh connection per
+  case (isolated state), so an un-registered-modem left by a prior case didn't carry
+  over. The CLI reuses one connection per plan, so state carried, and a case that
+  wasn't self-sufficient (no precondition to register first) failed. Fix: make the
+  case set up its own state. Deeper point: a non-independent test can hide behind an
+  isolating runner — and a test failing on its own setup is a *harness* fault, not a
+  *device* fault (the Day 12–13 distinction).
+
+### Design decisions to be able to defend (Day 11)
+
+- **Balanced positive + negative cases** across all four feature areas.
+- **Self-contained preconditions** for order-independent, isolated tests.
+- **`run_plan` extraction** to remove duplication (DRY).
 
 ---
 
@@ -586,6 +659,6 @@ source — gitignore `results/`.
 
 ---
 
-*Appended per day. Next up (Day 11): grow the suite toward ~20 cases (more
-registration transitions, PDP context, error handling) so the metrics are
-meaningful, and tidy the harness code.*
+*Appended per day. Next up (Day 12): the differentiator — FAULT INJECTION. Teach the
+simulator to misbehave on command (delays, malformed replies, dropouts, wrong-state
+answers) so the harness has real device faults to detect and classify.*

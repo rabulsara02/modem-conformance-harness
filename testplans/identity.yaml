@@ -13,6 +13,10 @@ cases:
     send: "AT+CGMM"
     expect: "SC-LTE-100"
 
+  - name: IMSI is 15 digits
+    send: "AT+CIMI"
+    expect_regex: '\d{15}'
+
   - name: signal quality format
     send: "AT+CSQ"
     expect_regex: '\+CSQ: \d+,\d+'

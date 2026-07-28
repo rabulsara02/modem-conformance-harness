@@ -20,8 +20,8 @@ def test_loads_identity_plan():
     plan = load_plan(TESTPLANS / "identity.yaml")
     assert isinstance(plan, TestPlan)
     assert plan.name == "Identity and info"
-    assert len(plan.cases) == 5
-    assert plan.cases[0].send == "AT"
+    assert len(plan.cases) >= 5
+    assert any(c.send == "AT+CIMI" for c in plan.cases)
 
 
 def test_defaults_are_applied():

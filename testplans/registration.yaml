@@ -1,5 +1,5 @@
 name: Registration state machine
-description: Radio on/off and packet-attach transitions.
+description: Radio on/off, packet attach, and operator, with self-contained setup.
 cases:
   - name: registered on home network by default
     send: "AT+CREG?"
@@ -10,6 +10,13 @@ cases:
       - "AT+CFUN=0"
     send: "AT+CREG?"
     expect: "+CREG: 0,0"
+
+  - name: radio on re-registers
+    precondition:
+      - "AT+CFUN=0"
+      - "AT+CFUN=1"
+    send: "AT+CREG?"
+    expect: "+CREG: 0,1"
 
   - name: cannot attach while not registered
     precondition:
@@ -22,3 +29,17 @@ cases:
       - "AT+CFUN=1"
     send: "AT+CGATT=1"
     expect: "OK"
+
+  - name: losing registration clears the packet attach
+    precondition:
+      - "AT+CFUN=1"
+      - "AT+CGATT=1"
+      - "AT+CFUN=0"
+    send: "AT+CGATT?"
+    expect: "+CGATT: 0"
+
+  - name: operator name shown when registered
+    precondition:
+      - "AT+CFUN=1"
+    send: "AT+COPS?"
+    expect: "SimCorp Telecom"

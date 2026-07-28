@@ -1,0 +1,26 @@
+name: Error handling and verbosity
+description: Unknown commands and AT+CMEE error-report modes (self-contained setup).
+cases:
+  - name: unknown command errors plainly
+    precondition:
+      - "AT+CMEE=0"
+    send: "AT+BOGUS"
+    expect: "ERROR"
+
+  - name: verbose mode gives a text error
+    precondition:
+      - "AT+CMEE=2"
+    send: "AT+BOGUS"
+    expect: "+CME ERROR: unknown"
+
+  - name: numeric mode gives a coded error
+    precondition:
+      - "AT+CMEE=1"
+    send: "AT+BOGUS"
+    expect: "+CME ERROR: 100"
+
+  - name: CMEE read reports the mode
+    precondition:
+      - "AT+CMEE=2"
+    send: "AT+CMEE?"
+    expect: "+CMEE: 2"

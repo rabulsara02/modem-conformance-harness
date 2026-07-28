@@ -1,0 +1,20 @@
+name: PDP context (data connection)
+description: Define, list, and validate PDP contexts.
+cases:
+  - name: define a context returns OK
+    send: 'AT+CGDCONT=1,"IP","internet"'
+    expect: "OK"
+
+  - name: defined context appears in the list
+    precondition:
+      - 'AT+CGDCONT=1,"IP","internet"'
+    send: "AT+CGDCONT?"
+    expect: '+CGDCONT: 1,"IP","internet"'
+
+  - name: reject a context id out of range
+    send: 'AT+CGDCONT=99,"IP","x"'
+    expect: "ERROR"
+
+  - name: test form lists supported values
+    send: "AT+CGDCONT=?"
+    expect: "+CGDCONT: (1-16)"

@@ -75,3 +75,17 @@ def test_timeout_exhausted_marks_timed_out():
     result = run_case(_case(retries=1), FakeTransport([TimeoutError, TimeoutError]), backoff_base=0)
     assert not result.passed
     assert result.timed_out
+
+def test_run_plan_runs_every_case():
+    from harness.runner import run_plan
+    from harness.testplan import TestPlan
+
+    plan = TestPlan(
+        name="p", description="",
+        cases=[_case(), _case(name="two", send="AT+CGMI", expect="Corp")],
+    )
+    # FakeTransport pops one response per send: ATE0, then each case.
+    transport = FakeTransport(["OK", "OK", "SimCorp"])
+    results = run_plan(plan, transport)
+    assert len(results) == 2
+    assert all(r.passed for r in results)
