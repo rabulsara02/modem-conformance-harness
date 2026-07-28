@@ -516,6 +516,59 @@ asserts calls; fake = lightweight working substitute (ours).
 
 ---
 
+## Day 10 — Metrics, JSON summaries, and a CLI
+
+### The concepts
+
+**1. Machine-readable output vs logs.** Logs are for humans reading one run; a JSON
+summary is for machines — CI gates on it, dashboards chart it, the Day 14 report is
+generated from it. Instrument from the start so numbers never have to be invented.
+
+**2. What we measure.** Cases/passed/failed, pass rate %, per-case latency + total
+duration, total retries (flakiness absorbed), timeouts (separated because a
+no-response ≠ a wrong-response — the seed of Day 12 classification).
+
+**3. JSON + serialization.** JSON = universal text data format. `json` module +
+`dataclasses.asdict()` bridges typed `CaseResult` objects to portable data.
+
+**4. Single-responsibility separation.** runner (one case) → report (aggregate +
+write) → run.py (orchestrate/CLI). Each does one job, each testable alone.
+
+**5. CLI with argparse + exit codes.** `argparse` gives flags/help/validation; the
+tool returns exit code 0 (all passed) or non-zero (something failed) so CI and
+scripts can gate on it.
+
+**6. Don't commit generated artifacts.** `results/summary.json` is output, not
+source — gitignore `results/`.
+
+### Interview flashcards — Day 10
+
+- **Q: Why emit a JSON summary instead of just logging?**
+  A: Machines consume it — CI can gate on it, a report/dashboard can render it, and
+  it's the single source for later reporting. Structured data outlives a scrollback.
+
+- **Q: What metrics do you capture and why?**
+  A: Pass/fail counts and pass rate (did it conform), latency/duration
+  (performance), retries (flakiness absorbed), and timeouts (a distinct, harsher
+  failure). Retries and timeouts specifically set up fault classification.
+
+- **Q: How does your tool tell CI whether the run passed?**
+  A: Exit code — 0 if all cases passed, non-zero otherwise. CI reads the exit code
+  to pass or fail the build.
+
+- **Q: Why split runner, report, and the CLI into separate files?**
+  A: Single responsibility — running a case, aggregating results, and orchestrating
+  are different jobs; separating them keeps each testable and replaceable.
+
+### Design decisions to be able to defend (Day 10)
+
+- **JSON summary** for machine consumption + a human-readable printout.
+- **Exit codes** so the CLI integrates with CI/automation.
+- **runner / report / CLI separation** — single responsibility.
+- **gitignore generated `results/`** — outputs aren't source.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -533,6 +586,6 @@ asserts calls; fake = lightweight working substitute (ours).
 
 ---
 
-*Appended per day. Next up (Day 10): metrics capture — every run emits a
-machine-readable summary (case counts, pass/fail, durations, retry counts): the
-numbers that become resume bullets.*
+*Appended per day. Next up (Day 11): grow the suite toward ~20 cases (more
+registration transitions, PDP context, error handling) so the metrics are
+meaningful, and tidy the harness code.*

@@ -382,7 +382,14 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 9 COMPLETE.** Added per-case timeout (deadline-based, raises
+  `TimeoutError`), retry with exponential backoff, attempt/timeout recording, and
+  structured logging. Tested the retry/timeout paths deterministically with an
+  injected `FakeTransport`. Verified a deliberate mismatch fails after 2 attempts.
+  50 tests green in CI.
+- **Bug caught + fixed:** updated `_read_response` to require a timeout but the
+  `TcpTransport.send` call site still passed none — a `TypeError` (signature vs call
+  site disagreement). Fixed by passing `timeout` through.
 
 ---
 

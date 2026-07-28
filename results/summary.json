@@ -1,0 +1,105 @@
+{
+  "plan": "all",
+  "generated_at": "2026-07-28T18:39:24.641488+00:00",
+  "totals": {
+    "cases": 9,
+    "passed": 9,
+    "failed": 0,
+    "timed_out": 0,
+    "total_retries": 0,
+    "pass_rate_pct": 100.0,
+    "total_duration_ms": 1.62
+  },
+  "cases": [
+    {
+      "name": "attention responds OK",
+      "passed": true,
+      "sent": "AT",
+      "response": "OK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.20516698714345694,
+      "reason": ""
+    },
+    {
+      "name": "manufacturer identification",
+      "passed": true,
+      "sent": "AT+CGMI",
+      "response": "SimCorp\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.11979098781011999,
+      "reason": ""
+    },
+    {
+      "name": "model identification",
+      "passed": true,
+      "sent": "AT+CGMM",
+      "response": "SC-LTE-100\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.11879202793352306,
+      "reason": ""
+    },
+    {
+      "name": "signal quality format",
+      "passed": true,
+      "sent": "AT+CSQ",
+      "response": "+CSQ: 20,99\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.19158399663865566,
+      "reason": ""
+    },
+    {
+      "name": "SIM reports ready",
+      "passed": true,
+      "sent": "AT+CPIN?",
+      "response": "+CPIN: READY\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.14562500291503966,
+      "reason": ""
+    },
+    {
+      "name": "registered on home network by default",
+      "passed": true,
+      "sent": "AT+CREG?",
+      "response": "+CREG: 0,1\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.13687499449588358,
+      "reason": ""
+    },
+    {
+      "name": "radio off deregisters",
+      "passed": true,
+      "sent": "AT+CREG?",
+      "response": "+CREG: 0,0\r\n\r\nOK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.2262909838464111,
+      "reason": ""
+    },
+    {
+      "name": "cannot attach while not registered",
+      "passed": true,
+      "sent": "AT+CGATT=1",
+      "response": "ERROR",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.2382500097155571,
+      "reason": ""
+    },
+    {
+      "name": "attach succeeds once registered",
+      "passed": true,
+      "sent": "AT+CGATT=1",
+      "response": "OK",
+      "attempts": 1,
+      "timed_out": false,
+      "duration_ms": 0.24195798323489726,
+      "reason": ""
+    }
+  ]
+}

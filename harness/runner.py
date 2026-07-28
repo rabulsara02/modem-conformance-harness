@@ -29,6 +29,7 @@ class CaseResult:
     response: str
     attempts: int = 1          # how many tries it actually took
     timed_out: bool = False    # did the final attempt end in a timeout?
+    duration_ms: float = 0.0      # how long the case took (seconds) (all attempts)
     reason: str = ""           # why it failed (empty if it passed)
 
 
@@ -47,10 +48,10 @@ def _check(case, response: str):
 
 def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
     """Run one case: preconditions, then send-and-check with retries + backoff."""
+    start = time.monotonic()
     timeout = case.timeout_ms / 1000.0
     max_attempts = case.retries + 1
 
-    # Preconditions set up state; best-effort (ignore their responses/timeouts).
     for pre in case.precondition:
         try:
             transport.send(pre, timeout=timeout)
@@ -68,16 +69,21 @@ def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
             log.info("case=%r attempt=%d/%d sent=%r passed=%s",
                      case.name, attempt, max_attempts, case.send, passed)
             if passed:
-                return CaseResult(case.name, True, case.send, response, attempts=attempt)
+                return CaseResult(
+                    case.name, True, case.send, response, attempts=attempt,
+                    duration_ms=(time.monotonic() - start) * 1000,
+                )
         except TimeoutError as e:
             timed_out = True
             last_response, last_reason = "", str(e)
             log.warning("case=%r attempt=%d/%d TIMEOUT sent=%r",
                         case.name, attempt, max_attempts, case.send)
 
-        # Wait before the next attempt (exponential backoff), but not after the last.
         if attempt < max_attempts:
             time.sleep(backoff_base * (2 ** (attempt - 1)))
 
-    return CaseResult(case.name, False, case.send, last_response,
-                      attempts=max_attempts, timed_out=timed_out, reason=last_reason)
+    return CaseResult(
+        case.name, False, case.send, last_response, attempts=max_attempts,
+        timed_out=timed_out, duration_ms=(time.monotonic() - start) * 1000,
+        reason=last_reason,
+    )

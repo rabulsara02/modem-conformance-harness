@@ -1,14 +1,15 @@
-# Review Session 1 — Days 1–7 (Simulator + Harness foundation)
+# Review — Interview Prep (living doc, updated as the project grows)
 
 A consolidated, interview-focused review of everything built so far. Pairs with
 `LEARNING_NOTES.md` (per-day concepts + flashcards); this doc adds the connective
 tissue: the pitch, the architecture, the cross-cutting themes, honest limitations,
-and a mock-interview drill.
+and a mock-interview drill. Updated a little each day.
 
-**What exists so far:** a cellular modem *simulator* (a TCP server that speaks 14
-AT commands, with a registration state machine) and the *foundation of a
-conformance harness* (a declarative YAML test-plan format + validating loader).
-36 automated tests, green CI, containerized with Docker.
+**What exists so far (through Day 9):** a cellular modem *simulator* (a TCP server
+that speaks 14 AT commands, with a registration state machine) and a *working
+conformance harness* — declarative YAML test plans, a Transport interface, and a
+runner with timeouts + retries. Tests run every YAML case against a live simulator;
+~50 automated tests, green CI, containerized with Docker.
 
 ---
 
@@ -109,7 +110,7 @@ ERROR). *This is conformance testing in miniature.*
 ### D. Testing
 
 - **Unit vs integration** — we test command logic directly (unit), no sockets.
-- **pytest discovery** — `test_`* functions, `Test*` classes (hence
+- **pytest discovery** — `test_`* functions, `Test`* classes (hence
 `__test__ = False` on our models).
 - `pytest.raises` **/** `tmp_path` — assert-it-throws + throwaway temp files for
 negative tests.
@@ -133,19 +134,43 @@ transitives resolve automatically.
 
 
 
+### F. Harness runtime (Days 8–9)
+
+- **Transport interface (dependency inversion).** Driver talks to an abstract
+`Transport` (open/close/send), not sockets. TCP now, serial (real hardware) later
+— swap = one new class, zero driver changes. Architecture name:
+**port-and-adapter / hexagonal**.
+- **pytest fixtures + parametrization.** A fixture starts the simulator in a
+background thread on an **ephemeral port** (port 0 → OS picks a free one);
+parametrization turns each YAML case into its own pass/fail result. Per-connection
+state gives free test isolation.
+- **Timeouts (deadline pattern).** Bounded waits — a hang blocks the whole run.
+`send()` raises `TimeoutError` at the deadline.
+- **Retries + exponential backoff.** Absorb *transient* failures, but *record the
+attempt count* so retries can't silently mask a persistent bug. Backoff grows the
+wait each try; production adds jitter.
+- **Test doubles / DI.** Because the runner depends on the interface, tests inject a
+`FakeTransport` to drive the timeout/retry paths deterministically. Stub = canned
+answers, mock = also asserts calls, fake = working substitute (ours).
+
+
+
 ## 4. Design decisions to defend ("why not the alternative?")
 
 
-| Decision        | Chose                          | Instead of          | One-line reason                                      |
-| --------------- | ------------------------------ | ------------------- | ---------------------------------------------------- |
-| Transport       | TCP                            | UDP                 | AT is a reliable, ordered, line-based stream         |
-| Command routing | Dispatch table                 | if/elif chain       | Readable, constant-time, open/closed                 |
-| Registration    | Derived FSM                    | Hand-set flags      | Single source of truth, no drift                     |
-| Illegal ops     | Guard → ERROR                  | Allow / crash       | Mirrors real hardware; it's the point of conformance |
-| Test cases      | YAML data                      | Python code         | Non-coders can add tests; plan ≠ engine              |
-| Concurrency     | Threads                        | asyncio             | Simplest thing that stops blocking; easy to explain  |
-| YAML parsing    | `safe_load`                    | `load`              | Avoids arbitrary-object/code execution               |
-| Error handling  | Graceful (sim) / loud (loader) | One rule everywhere | Match strategy to trust level of the input           |
+| Decision              | Chose                          | Instead of              | One-line reason                                      |
+| --------------------- | ------------------------------ | ----------------------- | ---------------------------------------------------- |
+| Transport             | TCP                            | UDP                     | AT is a reliable, ordered, line-based stream         |
+| Command routing       | Dispatch table                 | if/elif chain           | Readable, constant-time, open/closed                 |
+| Registration          | Derived FSM                    | Hand-set flags          | Single source of truth, no drift                     |
+| Illegal ops           | Guard → ERROR                  | Allow / crash           | Mirrors real hardware; it's the point of conformance |
+| Test cases            | YAML data                      | Python code             | Non-coders can add tests; plan ≠ engine              |
+| Concurrency           | Threads                        | asyncio                 | Simplest thing that stops blocking; easy to explain  |
+| YAML parsing          | `safe_load`                    | `load`                  | Avoids arbitrary-object/code execution               |
+| Error handling        | Graceful (sim) / loud (loader) | One rule everywhere     | Match strategy to trust level of the input           |
+| Driver ↔ modem        | Transport interface            | Direct socket calls     | Swap in real hardware with one new class             |
+| Waiting on device     | Bounded timeout + retries      | Wait forever / one shot | Never hang; absorb transient blips, record attempts  |
+| Testing failure paths | Injected fake transport        | A real flaky device     | Deterministic, fast, no hardware                     |
 
 
 Being able to give the "instead of / because" for each is what separates "I
@@ -240,106 +265,135 @@ conversation about this project.
 
 
 
-## 9. Mock-interview answers (speak these; don't memorize word-for-word)
+## 9. Mock-interview answers (say these out loud)
 
-**1. Why TCP and not UDP?**
-AT commands are a reliable, ordered, line-based conversation: send a command, get
-a response, in order. TCP gives that stream with delivery guarantees. UDP can drop
-or reorder packets — fine for video, wrong for a modem command protocol. We also
-frame on newline (`readline()`), which only makes sense on a continuous byte stream.
 
-**2.** `0.0.0.0` **vs** `127.0.0.1`**?**
-`127.0.0.1` accepts connections only from the same machine. `0.0.0.0` listens on
-all interfaces, so other containers or hosts can reach the simulator. We need that
-for docker-compose — the harness container connects to the sim by service name. Bind
-to localhost and the two-container setup breaks.
 
-**3. Walk through network registration.**
-Inputs drive a derived FSM in `_recompute_registration`: SIM must be ready
-(`AT+CPIN?` → `READY`) and radio on (`AT+CFUN=1`). Then we go to `REGISTERED`
-(home). `AT+CREG?` reports that; `AT+COPS?` returns the operator; only then is
-`AT+CGATT=1` (packet attach) allowed. Radio off (`CFUN=0`) or SIM not ready drops
-registration and clears attach. Normal path is deterministic: ready SIM + radio on
-→ registered immediately (no real cell-search timing).
+### 1. Why TCP and not UDP for a modem simulator?
 
-**4. What does** `+CREG: 0,5` **mean?**
-Format is `+CREG: <n>,<stat>`. `0` is the reporting mode (unsolicited off). `5`
-means registered, roaming. In our enum that's `ROAMING`. Home network is `1`;
-searching `2`; denied `3`; not registered `0`. Roaming isn't on the normal path
-yet — it's reserved for fault injection.
+AT is a reliable, ordered, line-based command stream — you send a command, get a
+complete response, in order. TCP gives that: connection-oriented, ordered delivery,
+retransmits lost packets. UDP is fire-and-forget datagrams with no ordering
+guarantee; you'd reinvent reliability and framing on top. Real modems are serial
+streams; TCP is the network analogue of that stream.
 
-**5. Why a state machine instead of booleans?**
-Booleans drift — you can have `registered=True` and `searching=True` at once,
-which is nonsense. An FSM has exactly one `reg_state`. We store the *inputs*
-(`sim_ready`, `functionality`) and *derive* `reg_state` in one function, so there's
-a single source of truth and no inconsistent combinations.
+### 2. What's the difference between binding to `0.0.0.0` and `127.0.0.1`?
 
-**6.** `AT+CGATT=1` **before registering — what happens?**
-Guard condition: attach is only legal in `REGISTERED` or `ROAMING`. Otherwise we
-return `ERROR`, like real hardware. That's conformance testing in miniature —
-illegal sequences must fail cleanly, not crash or silently succeed. Deregistering
-also clears `attached` so you can't stay attached without registration.
+`127.0.0.1` accepts connections only from the same machine (localhost). `0.0.0.0`
+listens on all interfaces, so other containers or hosts on the network can reach
+you. We bind `0.0.0.0:5050` because docker-compose clients talk to the simulator by
+service name over the shared network — localhost-only would break that.
 
-**7. Why a dispatch table?**
-An if/elif chain for ~14 commands becomes unreadable and every new command edits
-the same giant function. A dict maps command → handler: readable, O(1) lookup,
-open/closed (add a handler + one table entry, touch nothing else). Each handler is
-unit-testable alone. We kept `handle_command()` stable so `server.py` never needed
-changes when we refactored.
+### 3. Walk me through what happens when a modem registers on a network.
 
-**8. Why YAML test cases instead of Python?**
-Plans are *data*; the driver is *code*. Non-coders can add cases by editing YAML.
-One loader/runner executes every plan. Schema fields: `send`, `expect` /
-`expect_regex`, optional `timeout_ms`, `retries`, `precondition`. Today we only
-*load* and validate; Day 8 wires the driver.
+1. Confirm SIM is ready (`AT+CPIN?` → READY).
+2. Turn radio on (`AT+CFUN=1`) — that drives registration.
+3. Modem searches and registers (home or roaming).
+4. Read status (`AT+CREG?`) — e.g. `+CREG: 0,1` for home.
+5. Attach packet/data service (`AT+CGATT=1`) — separate from voice registration.
+6. Optionally read operator (`AT+COPS?`).
 
-**9. Why** `yaml.safe_load` **not** `yaml.load`**?**
-`load` can construct arbitrary Python objects from the file — effectively code
-execution from untrusted input. `safe_load` only builds plain data (dicts, lists,
-strings). Test plans are files on disk; safer default costs nothing.
+In our sim, registration is *derived*: SIM ready + radio on → `REGISTERED`
+immediately via `_recompute_registration`. Real hardware has timing and cell
+selection; we keep it deterministic on purpose.
 
-**10. Simulator swallows bad input; loader raises — why?**
-Different trust models. The simulator models a *device under test* — hostile or
-malformed AT must return `ERROR` and keep running (one bad command can't kill the
-server). A malformed YAML plan is a *developer mistake* — fail loud with
-`ValueError` so CI catches it immediately. Match error strategy to who produced the
-input.
+### 4. What does `+CREG: 0,5` mean?
 
-**11. Unit vs integration in this project?**
-Unit: call `handle_command()` or `load_plan()` directly — no sockets, no ports,
-fast and deterministic (36 tests today). Integration: open a real TCP (or later
-serial) connection and drive the full path. That's Day 8 via a `Transport`
-interface. We unit-tested the brain first so networking bugs don't pollute command
-logic.
+`+CREG: <n>,<stat>`. First number is reporting mode (`n` — how/whether the modem
+unsolicited-reports registration changes). Second is status: **5 = registered,
+roaming**. Contrast: `0` not registered, `1` home, `2` searching, `3` denied.
+So `0,5` = mode 0, currently registered on a roaming network.
 
-**12. A bug you hit.**
-Pick one:
+### 5. Why model registration as a state machine instead of a set of booleans?
 
-- **Port 5000 in use** — macOS AirPlay. `lsof -i :5000`, moved simulator to 5050.
-- **APN uppercased** — whole-line `.upper()` mangled quoted APNs. Fixed: normalize
-the keyword only; leave string data alone.
-- **pytest collected** `TestCase`**/**`TestPlan` — `Test`* naming. Set `__test__ = False`.
-- **Double echo over** `nc` — not a bug: terminal local echo + modem `ATE1` echo.
+Registration is always in exactly one of a fixed set of states, with defined
+transitions — that's an FSM. Booleans like `is_registered` + `is_searching` can
+drift into impossible combos. We go further: we don't hand-set `reg_state`; we
+store inputs (`sim_ready`, `functionality`) and *derive* state in one place. Single
+source of truth, illegal states hard to represent, guards easy to test.
 
-**13. Limitations of the simulator?**
-Deliberately capped at ~14 public AT commands — scaffolding, not a full 3GPP
-stack. `SEARCHING` / `DENIED` / `ROAMING` exist in the enum but the normal path
-doesn't reach them (fault injection will). Registration is deterministic, not
-real radio timing. Identity/IMSI values are invented; everything from public
-TS 27.007. Harness loads plans but doesn't execute them yet.
+### 6. You send `AT+CGATT=1` before registering — what happens and why?
 
-**14. How does CI know it's safe to merge?**
-GitHub Actions on every push/PR: checkout → Python 3.13 → `pip install -r requirements.txt` → `pytest`. Green means the suite passed in a clean environment.
-We also prove the image with Docker (`docker run` runs pytest). Compose still uses
-Day-2 stubs for two-container networking; full sim+harness wire-up comes later.
+`ERROR`. Guard condition in the CGATT handler: attach is only allowed if
+`reg_state` is `REGISTERED` or `ROAMING`. Attaching to packet service without
+network registration is illegal on real hardware; modeling that rejection *is*
+conformance testing in miniature. Our YAML plan covers it: radio off, then
+`CGATT=1`, expect `ERROR`.
 
-**15. Swap simulator for a real modem — what changes?**
-Only the transport: TCP socket → serial (`/dev/ttyUSB`). Command logic, YAML plans,
-timeouts, and (later) classification stay the same. That's why Day 8 introduces a
-`Transport` interface (`send` / `open` / `close`) with a TCP implementation now and
-a serial drop-in later — zero harness changes above that seam.
+### 7. Why did you refactor to a dispatch table?
+
+If/elif chains grow brittle — every new command touches the same function. A dict
+of verb → handler is O(1), readable, and open/closed: add a command by adding an
+entry, not rewriting a ladder. Basic commands and extended (`AT+`) verbs each have
+their own table; `handle_command` only routes.
+
+### 8. Why are your test cases YAML instead of Python?
+
+Plan vs engine. Cases are *data* (send, expect, timeout, retries, preconditions);
+the runner is *code*. Non-coders can add tests by editing YAML; the engine never
+changes. One driver runs every plan. That's how real conformance suites scale —
+hundreds of cases, one harness.
+
+### 9. Why `yaml.safe_load` and not `yaml.load`?
+
+`yaml.load` can construct arbitrary Python objects from the file — that's a
+code-execution risk on untrusted or even casually shared YAML. `safe_load` only
+builds basic types (dict, list, str, int). Always use it for external config/plans.
+
+### 10. Simulator swallows bad input; loader raises — why the difference?
+
+Match error strategy to trust level. The simulator models a *device under test*:
+hostile or garbage AT input must never crash the connection — return `ERROR`,
+contain handler exceptions. The YAML loader is *developer config*: a malformed plan
+is a bug we want loud and immediate (`ValueError` with where it failed). Same
+project, opposite policies on purpose.
+
+### 11. Unit test vs integration test in your project?
+
+**Unit:** call `handle_command` / `load_plan` / `run_case` directly — no sockets.
+Command logic and runner paths (including `FakeTransport` for timeouts/retries) stay
+fast and deterministic. **Integration:** real TCP — fixture starts the simulator on
+an ephemeral port, `TcpTransport` sends AT over the wire, assert responses. Proves
+framing, echo, and networking work end-to-end.
+
+### 12. Tell me about a bug you hit and how you found it.
+
+Pick one (30-second story):
+
+- **Port 5000 in use** → macOS AirPlay Receiver. `lsof -i :5000`, moved to 5050.
+Lesson: diagnose the environment, don't only stare at your code.
+- **APN came back uppercased** → whole-line `.upper()` mangled quoted data in
+`AT+CGDCONT`. Fix: uppercase only the verb; preserve argument case. Lesson:
+keywords are case-insensitive; string payloads are not.
+- **pytest collected** `TestCase`**/**`TestPlan` → `Test`* naming convention.
+`__test__ = False`. Lesson: know how your test runner discovers tests.
+
+
+
+### 13. What are the limitations of your simulator?
+
+Scaffolding, not a full 3GPP stack — ~14 commands. `SEARCHING` / `DENIED` /
+`ROAMING` exist in the enum but the normal path doesn't reach them yet (fault
+injection comes later). Registration is instant and deterministic, not timed cell
+selection. Identity values (manufacturer, IMSI) are invented from public
+TS 27.007. It's enough to drive a real harness design; it's not a production modem
+model.
+
+### 14. How does your CI know the code is safe to merge?
+
+GitHub Actions on every push/PR: checkout → Python 3.13 → `pip install -r requirements.txt` → `pytest`. Green means unit + integration suite passed in a
+clean environment. Docker keeps the runtime reproducible locally the same way.
+CI doesn't prove hardware correctness — it proves *this repo's tests* still pass.
+
+### 15. If you swapped the simulator for a real modem, what would change?
+
+Only the transport. The driver talks to an abstract `Transport` (`open` / `close` /
+`send`), not sockets. Today: `TcpTransport` to the sim. For hardware: a
+`SerialTransport` implementing the same interface. Runner, YAML plans, and
+expectations stay untouched — that's dependency inversion / port-and-adapter. The
+abstraction exists *so* this swap is one new class.
 
 ---
 
-*Next: Day 8 — the driver that runs these YAML plans against the simulator through
-a Transport interface (the seam that later swaps in real hardware, per Q15).*
+*Living doc — update answers when Day 10+ changes architecture or adds fault
+classification.*
