@@ -475,7 +475,15 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 13 COMPLETE — the differentiator is built and measured.** Added
+  `classifier.py` (device/timeout/harness labels), a `harness_error` signal in
+  `run_case`, classification folded into the report (`by_category`), and
+  `selfcheck.py`. Live self-check: **100% (6/6)** classification accuracy across all
+  four labels. 78 tests green in Docker + CI.
+- **Housekeeping caught afterward:** `.dockerignore` had been accidentally removed
+  (via `git add -A` staging its deletion), so builds were copying `.venv` (context
+  25MB). Diagnosed via the build-size jump + `git log -- .dockerignore`; restored it
+  and added `results/`/caches.
 
 ---
 

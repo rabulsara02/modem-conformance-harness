@@ -766,6 +766,15 @@ into "I measured it at X% across N scenarios."
   A: A timeout is no response before the deadline (a `TimeoutError`); a device fault
   is a response that arrived but didn't match. Different signals, different labels.
 
+- **Q: (We hit this) A config file silently disappeared from the repo — how did you
+  notice and investigate?**
+  A: The Docker build context ballooned (100KB → 25MB), which meant `.venv` was
+  being copied in — i.e. `.dockerignore` was gone. `git log -- .dockerignore` showed
+  it was removed in a commit, because `git add -A` stages *deletions* too: if a file
+  vanishes from the working tree, `-A` commits it as removed. Lesson: `-A` is
+  convenient but commits removals; and a sudden metric change (build size) is a clue
+  worth chasing.
+
 ### Design decisions to be able to defend (Day 13)
 
 - **Rule-based classifier with ordered checks** — transparent and defensible.
@@ -774,6 +783,49 @@ into "I measured it at X% across N scenarios."
   metric.
 - **Classification folded into the JSON report** (`by_category`) for Day 14's
   rendering.
+
+---
+
+## Day 14 — JUnit XML + HTML reporting
+
+### The concepts
+
+**1. JUnit XML.** The de-facto standard test-report schema (not Java-specific). CI
+tools read it to show pass/fail, annotate PRs, and track trends — no knowledge of
+your harness needed. Producing a standard format makes the tool interoperable.
+
+**2. HTML report.** The human view: a self-contained page (inline CSS) you can open,
+email, or commit. Turns "78 tests pass" into something someone can *see*.
+
+**3. One summary, many renderings.** `build_summary` computes the data once; JSON /
+JUnit / HTML only *present* it. Single source of truth, multiple views — change the
+metrics once, all views update.
+
+**4. Escaping.** Untrusted text (a modem response) can contain XML/HTML special
+characters. ElementTree escapes XML automatically; `html.escape` handles the HTML.
+Awareness of escaping is a security-hygiene signal.
+
+### Interview flashcards — Day 14
+
+- **Q: What is JUnit XML and why generate it?**
+  A: A standard test-report format CI systems understand. Emitting it lets CI show
+  pass/fail, annotate builds, and trend results without knowing my harness's
+  internals.
+
+- **Q: You produce JSON, JUnit, and HTML — why three?**
+  A: Different audiences: JSON for machines/automation, JUnit for CI, HTML for
+  humans. All render the same summary, so there's one source of truth.
+
+- **Q: How do you keep generated HTML/XML safe and valid?**
+  A: Escape untrusted content — ElementTree escapes XML for me, and I use
+  `html.escape` for the HTML — so a response containing `<`, `&`, or quotes can't
+  corrupt the markup.
+
+### Design decisions to be able to defend (Day 14)
+
+- **One summary → three renderings** (JSON/JUnit/HTML): single source of truth.
+- **Stdlib only** (`xml.etree`, `html.escape`) — no new dependencies.
+- **Category surfaced in both reports** (JUnit `classname`/`type`, HTML badge).
 
 ---
 
@@ -794,6 +846,6 @@ into "I measured it at X% across N scenarios."
 
 ---
 
-*Appended per day. Next up (Day 14): turn the results into a polished report — JUnit
-XML (for CI) and an HTML conformance report showing pass/fail, the fault category per
-failure, and the run metrics.*
+*Appended per day. Next up (Day 15): wire the whole thing into CI + Docker Compose so
+the harness runs against the simulator automatically and publishes the report as a
+build artifact.*

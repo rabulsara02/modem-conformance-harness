@@ -16,7 +16,7 @@ from pathlib import Path
 from harness.testplan import load_plan
 from harness.transport import TcpTransport
 from harness.runner import run_case, run_plan
-from harness.report import build_summary, write_summary
+from harness.report import build_summary, write_summary, write_junit, write_html
 
 
 def main(argv=None) -> int:
@@ -25,6 +25,8 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=5050, help="modem port")
     parser.add_argument("--plans", default="testplans", help="folder of YAML plans")
     parser.add_argument("--out", default="results/summary.json", help="summary output")
+    parser.add_argument("--junit", default="results/junit.xml", help="JUnit XML output")
+    parser.add_argument("--html", default="results/report.html", help="HTML report output")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -45,15 +47,16 @@ def main(argv=None) -> int:
             transport.close()
 
     summary = build_summary(results)
-    out = write_summary(summary, args.out)
+    write_summary(summary, args.out)
+    write_junit(summary, args.junit)
+    write_html(summary, args.html)
 
     t = summary["totals"]
     print("\n=== Conformance summary ===")
     print(f"cases={t['cases']} passed={t['passed']} failed={t['failed']} "
           f"timed_out={t['timed_out']} retries={t['total_retries']} "
           f"pass_rate={t['pass_rate_pct']}% duration={t['total_duration_ms']}ms")
-    print(f"wrote {out}")
-
+    print(f"wrote {args.out}, {args.junit}, {args.html}")
     # Exit non-zero if anything failed, so CI / scripts can gate on it.
     return 0 if t["failed"] == 0 else 1
 
