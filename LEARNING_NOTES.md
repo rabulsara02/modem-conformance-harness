@@ -829,6 +829,60 @@ Awareness of escaping is a security-hygiene signal.
 
 ---
 
+## Day 15 — CI/CD, Compose orchestration, and artifacts
+
+### The concepts
+
+**1. CI/CD.** Runs checks automatically on every push. We added an end-to-end
+conformance run (real sim + harness + report) on top of pytest, so every commit
+answers "does it conform?" and publishes the report.
+
+**2. Multi-container orchestration.** Compose runs simulator + harness together;
+the harness reaches the sim by *service name* (`--host simulator`) — the Day 2
+name-based networking.
+
+**3. `depends_on` = started, not ready.** It waits for the container to start, not
+for the server to accept connections — hence a brief `sleep` (production would use a
+health check).
+
+**4. Volumes.** Mount a host folder into the container (`./results:/app/results`) so
+generated files survive the container and land on the host.
+
+**5. Artifacts + `if: always()`.** CI saves the `results/` folder as a downloadable
+artifact; `if: always()` uploads it even on failure — when you most want the report.
+
+**6. Gating on exit code.** `harness.run` exits 0/1; CI turns a non-zero exit into a
+red build, so a real conformance failure fails the pipeline.
+
+### Interview flashcards — Day 15
+
+- **Q: What does your CI pipeline do on every push?**
+  A: Installs deps, runs the unit + integration tests, then starts the simulator and
+  runs the full conformance pass against it, and uploads the HTML/JUnit report as a
+  downloadable artifact. A conformance failure fails the build.
+
+- **Q: In Docker Compose, how does the harness find the simulator?**
+  A: By service name over Compose's default network — `--host simulator` resolves to
+  the simulator container.
+
+- **Q: Does `depends_on` wait for the simulator to be ready?**
+  A: No — only for it to start. "Started" isn't "accepting connections," so I sleep
+  briefly (a health check would be the production-grade fix).
+
+- **Q: How do you get the report out of a CI run?**
+  A: Upload `results/` as a build artifact with `actions/upload-artifact`, using
+  `if: always()` so it's available even when the run fails.
+
+### Design decisions to be able to defend (Day 15)
+
+- **CI runs both pytest and a live end-to-end conformance pass** (fast checks + real
+  report).
+- **Report published as an artifact** (`if: always()`) — visible without cloning.
+- **Compose = full local conformance pass** with a results volume.
+- **Build gated on the harness exit code.**
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -846,6 +900,5 @@ Awareness of escaping is a security-hygiene signal.
 
 ---
 
-*Appended per day. Next up (Day 15): wire the whole thing into CI + Docker Compose so
-the harness runs against the simulator automatically and publishes the report as a
-build artifact.*
+*Appended per day. Next up (Day 16): rewrite the README so the repo reads like a test
+plan — what it proves, the architecture, how to run it, and the metrics.*

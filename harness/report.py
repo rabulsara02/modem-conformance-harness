@@ -128,6 +128,14 @@ def write_html(summary: dict, path) -> Path:
 
     cat_summary = " · ".join(f"{esc(k)}: {esc(v)}" for k, v in by_cat.items()) or "—"
 
+    # Reformat the machine ISO timestamp into something readable for the page.
+    # (summary.json keeps the precise ISO value for machines; humans get this.)
+    raw_generated = summary.get("generated_at", "")
+    try:
+        generated = datetime.fromisoformat(raw_generated).strftime("%b %d, %Y · %H:%M UTC")
+    except (ValueError, TypeError):
+        generated = raw_generated
+
     doc = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Modem Conformance Report</title>
@@ -145,7 +153,7 @@ def write_html(summary: dict, path) -> Path:
   .badge {{ color: white; padding: .1rem .5rem; border-radius: 999px; font-size: .8rem; }}
 </style></head><body>
   <h1>Modem Conformance Report</h1>
-  <div class="meta">plan: {esc(summary.get('plan', 'all'))} · generated {esc(summary.get('generated_at', ''))}</div>
+  <div class="meta">plan: {esc(summary.get('plan', 'all'))} · generated {esc(generated)}</div>
   <div class="cards">
     <div class="card"><div class="n">{totals['cases']}</div>cases</div>
     <div class="card"><div class="n">{totals['pass_rate_pct']}%</div>pass rate</div>

@@ -1,5 +1,6 @@
 name: CI
 on: [push, pull_request]
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -9,4 +10,19 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r requirements.txt
-      - run: pytest
+
+      - name: Unit + integration tests
+        run: pytest
+
+      - name: Conformance run (harness vs live simulator)
+        run: |
+          python -m simulator.server &   # start the simulator in the background
+          sleep 2                        # give it a moment to bind (started != ready)
+          python -m harness.run          # runs all plans; exit code gates the build
+
+      - name: Upload conformance report
+        if: always()                     # upload even if the conformance run failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: results/

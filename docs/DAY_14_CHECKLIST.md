@@ -338,7 +338,14 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 14 COMPLETE.** Added `write_junit` (JUnit XML) and `write_html`
+  (self-contained HTML report) to `report.py`, both rendered from the single
+  summary, and wired them into `harness.run`. Viewed the HTML report live — clean
+  cards + per-case table with category badges. Docker context back to ~100KB after
+  the `.dockerignore` restore. 81 tests green in Docker + CI.
+- **Two bugs caught pre-run:** a leftover `print(f"wrote {out}")` (undefined `out`)
+  in `run.py` that pytest never exercised; and the Day 10 `_r` test helper lacked a
+  `response` param the new JUnit tests needed. Both fixed.
 
 ---
 

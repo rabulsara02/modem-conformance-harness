@@ -1,9 +1,19 @@
-# docker-compose.yml — run the real modem simulator in a container.
-# `docker compose up` builds the image and starts the simulator, with its port
-# published to the host so you can connect with `nc localhost 5050`.
+# docker-compose.yml — run a full conformance pass: the simulator plus the harness.
+# `docker compose up --build` starts the simulator, then the harness runs every plan
+# against it and writes the reports into ./results on the host.
 services:
   simulator:
     build: .
     command: python -m simulator.server
     ports:
       - "5050:5050"
+
+  harness:
+    build: .
+    # depends_on only waits for the container to START, not for the server to be
+    # READY to accept connections — so we sleep briefly first (same lesson as Day 2).
+    command: sh -c "sleep 2 && python -m harness.run --host simulator --port 5050"
+    depends_on:
+      - simulator
+    volumes:
+      - ./results:/app/results    # generated reports land on the host
