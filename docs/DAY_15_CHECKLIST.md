@@ -187,7 +187,13 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 15 COMPLETE — pipeline fully automated.** Docker Compose now runs a full
+  conformance pass (simulator + harness, results via a host volume); CI runs pytest
+  plus a live conformance run and uploads the `conformance-report` artifact. Verified
+  the full compose pass (21/21) and downloaded/opened the CI-generated report.
+- **Polish:** reformatted the HTML report's timestamp for humans (`Jul 29, 2026 ·
+  19:35 UTC`) while keeping the precise ISO value in `summary.json` — the
+  data-vs-presentation split in action.
 
 ---
 

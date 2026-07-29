@@ -883,6 +883,41 @@ red build, so a real conformance failure fails the pipeline.
 
 ---
 
+## Day 16 — The README as a test plan
+
+### The concepts
+
+**1. Lead with "what it proves."** A reviewer cares first that the project
+demonstrates device-vs-harness fault triage with a measured accuracy number — that
+belongs at the top, above implementation detail.
+
+**2. Test-plan structure, not a tutorial.** Purpose → architecture → how to run →
+command/fault/classification matrices → reports → scope. No narrative walkthrough.
+
+**3. Runnable in one paste + a CI badge.** `docker compose up --build` is the whole
+setup; the badge signals "tested and green" at a glance.
+
+**4. Name your limitations and the IP boundary.** Volunteering scope reads as
+maturity; stating "public 3GPP TS 27.007 only" removes any confidentiality ambiguity.
+
+### Interview flashcards — Day 16
+
+- **Q: Someone lands on your repo — what do you want them to learn in 60 seconds?**
+  A: What it proves (fault triage at 100% accuracy), that it's tested and green in
+  CI, and how to run the whole thing with one command.
+
+- **Q: Why call out limitations in your own README?**
+  A: It shows I understand the boundaries of my work — a focused model, not a full
+  3GPP stack — which builds credibility rather than undermining it.
+
+### Design decisions to be able to defend (Day 16)
+
+- **README leads with impact + a measured metric**, not implementation.
+- **One-command quick start** (Docker) so anyone can reproduce it.
+- **Explicit scope + public-spec IP note.**
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -900,5 +935,6 @@ red build, so a real conformance failure fails the pipeline.
 
 ---
 
-*Appended per day. Next up (Day 16): rewrite the README so the repo reads like a test
-plan — what it proves, the architecture, how to run it, and the metrics.*
+*Appended per day. Next up (Day 17): the finale — the real-hardware bridge decision
+(Tier A/B/C), a fault-injection demo (GIF/asciinema), and freezing the final metrics
+that become the resume bullets.*
