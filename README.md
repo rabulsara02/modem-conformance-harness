@@ -35,19 +35,40 @@ reporting — built from the **public 3GPP TS 27.007** command set.
 
 ## Architecture
 
-```
-   testplans/*.yaml        harness/                          simulator/
-   (declarative data)  ->  testplan.py  (load + validate)    server.py   (networking)
-                           run.py       (CLI, orchestrates)      |  uses
-                           runner.py    (run a case: timeout/    commands.py (AT logic +
-                                         retry) ---- TCP ---->     registration FSM)
-                           transport.py (interface: TCP now,        |
-                                         serial later)         faults.py   (fault injection)
-                           classifier.py(device/timeout/harness)
-                           report.py    (JSON + JUnit + HTML)
+```mermaid
+flowchart LR
+    Y["testplans/*.yaml<br/>declarative test data"]
 
-   Docker packages it  ·  Docker Compose runs sim + harness  ·  GitHub Actions runs it on every push
+    subgraph HARNESS["Harness"]
+        direction TB
+        TP["testplan.py<br/>load + validate"]
+        RUN["run.py<br/>CLI · orchestrates"]
+        RN["runner.py<br/>run a case · timeout + retry"]
+        TR["transport.py<br/>Transport interface<br/>(TCP now, serial later)"]
+        CL["classifier.py<br/>device / timeout / harness"]
+        RP["report.py<br/>JSON · JUnit · HTML"]
+        TP --> RUN --> RN
+        RN --> CL --> RP
+    end
+
+    subgraph SIM["Simulator"]
+        direction TB
+        SV["server.py<br/>networking"]
+        CM["commands.py<br/>AT logic + registration FSM"]
+        FA["faults.py<br/>fault injection"]
+        SV --> CM
+        CM -. "corrupts responses" .-> FA
+    end
+
+    R["results/<br/>summary.json · junit.xml · report.html"]
+
+    Y --> TP
+    RN -- "AT commands over TCP" --> TR --> SV
+    RP --> R
 ```
+
+> Packaged with **Docker**; **Docker Compose** runs the simulator + harness together;
+> **GitHub Actions** runs the whole pass on every push.
 
 Two deliberate separations form the backbone:
 
@@ -177,14 +198,30 @@ duration, retry counts, and timeouts.
 ## Project layout
 
 ```
-simulator/     server.py (TCP)  commands.py (AT logic + FSM)  faults.py
-harness/       testplan.py  transport.py  runner.py  classifier.py  report.py  run.py  selfcheck.py
-testplans/     identity.yaml  registration.yaml  pdp.yaml  errors.yaml
-tests          test_simulator, test_harness, test_runner, test_report,
-               test_integration, test_faults, test_classifier, test_selfcheck
-docs/          project plan, per-day build log, interview review
-conftest.py    shared pytest fixtures       Dockerfile / docker-compose.yml
-.github/workflows/ci.yml
+modem-conformance-harness/
+├── simulator/                 # the fake modem
+│   ├── server.py              #   TCP networking
+│   ├── commands.py            #   AT command logic + registration state machine
+│   └── faults.py              #   on-demand fault injection
+├── harness/                   # the test harness
+│   ├── testplan.py            #   load + validate YAML plans
+│   ├── transport.py           #   Transport interface (TCP now, serial later)
+│   ├── runner.py              #   run a case: timeout + retry
+│   ├── classifier.py          #   label failures: device / timeout / harness
+│   ├── report.py              #   render JSON + JUnit + HTML
+│   ├── run.py                 #   CLI: run all plans
+│   └── selfcheck.py           #   measure classification accuracy
+├── testplans/                 # declarative test cases (YAML)
+│   ├── identity.yaml
+│   ├── registration.yaml
+│   ├── pdp.yaml
+│   └── errors.yaml
+├── test_*.py                  # 8 test modules (unit + integration), 81 tests
+├── conftest.py                # shared pytest fixtures
+├── docs/                      # project plan, per-day build log, interview review
+├── Dockerfile                 # container image
+├── docker-compose.yml         # runs simulator + harness together
+└── .github/workflows/ci.yml   # CI: tests + conformance run + report artifact
 ```
 
 ---
