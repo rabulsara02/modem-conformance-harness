@@ -3,9 +3,11 @@ run.py — Run all YAML test plans against a modem and write a JSON summary.
 
 Usage:
   python -m harness.run [--host H] [--port P] [--plans DIR] [--out FILE]
+  python -m harness.run --serial /dev/ttyUSB0     # run against a real modem
 
-Assumes a simulator is reachable (start one with `python -m simulator.server`
-or `docker compose up`). Exit code: 0 if all cases passed, 1 if any failed.
+Talks to the TCP simulator by default (start one with `python -m simulator.server`
+or `docker compose up`), or to a real serial modem with --serial. Exit code: 0 if
+all cases passed, 1 if any failed.
 """
 
 import argparse
@@ -27,6 +29,8 @@ def main(argv=None) -> int:
     parser.add_argument("--out", default="results/summary.json", help="summary output")
     parser.add_argument("--junit", default="results/junit.xml", help="JUnit XML output")
     parser.add_argument("--html", default="results/report.html", help="HTML report output")
+    parser.add_argument("--serial", help="talk to a real modem at this serial port "
+                                          "(e.g. /dev/ttyUSB0) instead of TCP")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -36,10 +40,18 @@ def main(argv=None) -> int:
         print(f"No plans found in {args.plans!r}", file=sys.stderr)
         return 2
 
+    def make_transport():
+        # Real hardware if --serial was given, otherwise TCP to the simulator.
+        # SerialTransport is imported lazily so pyserial stays an optional dependency.
+        if args.serial:
+            from harness.transport import SerialTransport
+            return SerialTransport(args.serial)
+        return TcpTransport(args.host, args.port)
+
     results = []
     for plan_path in plan_paths:
         plan = load_plan(plan_path)
-        transport = TcpTransport(args.host, args.port)
+        transport = make_transport()           # TCP simulator or a real serial modem
         transport.open()                       # one connection per plan
         try:
             results.extend(run_plan(plan, transport)) # originally send ATE0 + loop by hand

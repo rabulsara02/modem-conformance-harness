@@ -90,7 +90,13 @@ git push
 
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 16 COMPLETE.** Rewrote the README as a test plan: what it proves (fault
+  triage + 100% accuracy), architecture, one-command quick start, command/fault/
+  classification matrices, reports, scope, and the public-spec IP note. CI badge live.
+- **Diagram polish:** replaced the ASCII architecture drawing with a **Mermaid**
+  flowchart (GitHub renders it natively) and the jammed layout with a clean annotated
+  **directory tree** — matching each representation to the kind of info (flow vs
+  hierarchy).
 
 ---
 

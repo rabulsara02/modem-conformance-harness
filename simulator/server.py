@@ -38,37 +38,43 @@ class ATHandler(socketserver.StreamRequestHandler):
         client = self.client_address[0]
         log.info("client connected: %s", client)
 
-        for raw in self.rfile:
-            start = time.monotonic()
+        try:
+            for raw in self.rfile:
+                start = time.monotonic()
 
-            line = raw.decode(errors="replace").strip()
-            if not line:
-                continue  # ignore blank lines
+                line = raw.decode(errors="replace").strip()
+                if not line:
+                    continue  # ignore blank lines
 
-            # Capture echo AND fault mode BEFORE handling the command, so the
-            # command that *sets* a fault (or echo) is itself answered faithfully;
-            # only *later* commands are affected.
-            echo_before = state.echo
-            fault_before = state.fault_mode
+                # Capture echo AND fault mode BEFORE handling the command, so the
+                # command that *sets* a fault (or echo) is itself answered faithfully;
+                # only *later* commands are affected.
+                echo_before = state.echo
+                fault_before = state.fault_mode
 
-            body = handle_command(line, state)
+                body = handle_command(line, state)
 
-            # Inject the active fault into the outgoing response, if any.
-            send_body, drop = apply_fault(fault_before, body)
+                # Inject the active fault into the outgoing response, if any.
+                send_body, drop = apply_fault(fault_before, body)
 
-            if send_body is not None:
-                reply = ""
-                if echo_before:
-                    reply += line + "\r\n"
-                reply += "\r\n" + send_body + "\r\n"
-                self.wfile.write(reply.encode())
+                if send_body is not None:
+                    reply = ""
+                    if echo_before:
+                        reply += line + "\r\n"
+                    reply += "\r\n" + send_body + "\r\n"
+                    self.wfile.write(reply.encode())
 
-            latency_ms = (time.monotonic() - start) * 1000
-            log.info("cmd=%r -> %r fault=%r (%.2f ms)", line, send_body, fault_before, latency_ms)
+                latency_ms = (time.monotonic() - start) * 1000
+                log.info("cmd=%r -> %r fault=%r (%.2f ms)", line, send_body, fault_before, latency_ms)
 
-            if drop:
-                log.info("fault=dropout: closing connection to %s", client)
-                break
+                if drop:
+                    log.info("fault=dropout: closing connection to %s", client)
+                    break
+        except (ConnectionResetError, BrokenPipeError):
+            # The client hung up mid-exchange (common with the delay/dropout faults
+            # when a client times out and closes early). That's the client's doing,
+            # not a server error — log it cleanly instead of dumping a traceback.
+            log.info("client %s hung up", client)
 
         log.info("client disconnected: %s", client)
 

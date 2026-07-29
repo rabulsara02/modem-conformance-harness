@@ -93,3 +93,45 @@ class TcpTransport(Transport):
         # The simulator frames on newline, so terminate the command with CRLF.
         self._sock.sendall((command + "\r\n").encode())
         return _read_response(self._sock, timeout)
+
+
+class SerialTransport(Transport):
+    """Talk to a REAL modem over a serial port (e.g. /dev/ttyUSB0).
+
+    This is the ENTIRE cost of running the harness against physical hardware — one
+    new Transport. The runner, classifier, plans, reports, and CLI are unchanged.
+    Requires pyserial (`pip install pyserial`), imported lazily so the rest of the
+    project needs no extra dependency and CI stays pure-stdlib.
+    """
+
+    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 2.0):
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self._serial = None
+
+    def open(self) -> None:
+        import serial  # lazy: only needed when actually talking to hardware
+        self._serial = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
+
+    def close(self) -> None:
+        if self._serial is not None:
+            self._serial.close()
+            self._serial = None
+
+    def send(self, command: str, timeout: float = 2.0) -> str:
+        if self._serial is None:
+            raise RuntimeError("transport not open — call open() first")
+        self._serial.timeout = timeout
+        self._serial.write((command + "\r\n").encode())
+
+        deadline = time.monotonic() + timeout
+        buffer = ""
+        while time.monotonic() < deadline:
+            line = self._serial.readline().decode(errors="replace")
+            if not line:
+                continue
+            buffer += line
+            if any(_is_final_line(l) for l in buffer.splitlines()):
+                return buffer.strip()
+        raise TimeoutError(f"no complete response within {timeout:.2f}s")

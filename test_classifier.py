@@ -43,3 +43,12 @@ def test_connection_error_classifies_as_harness_fault():
     result = run_case(TestCase(name="t", send="AT", expect="OK"),
                       _DeadTransport(), backoff_base=0)
     assert classify(result) == FaultCategory.HARNESS_FAULT
+
+
+def test_serial_transport_satisfies_the_interface():
+    # The real-hardware transport can be CONSTRUCTED without pyserial (it's imported
+    # lazily in open()), so we can assert it satisfies the Transport contract with no
+    # hardware and no extra dependency.
+    from harness.transport import SerialTransport
+    t = SerialTransport("/dev/ttyUSB0")
+    assert isinstance(t, Transport)     # implements open/close/send
