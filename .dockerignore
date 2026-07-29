@@ -1,0 +1,7 @@
+# Keep the Docker build context small: don't copy these into the image.
+.venv
+__pycache__/
+*.pyc
+.git
+.pytest_cache/
+results/
