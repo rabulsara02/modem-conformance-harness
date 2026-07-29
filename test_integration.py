@@ -8,8 +8,7 @@ simulator in a background thread on an ephemeral port; each YAML case becomes it
 own parametrized pytest result.
 """
 
-import socketserver
-import threading
+
 from pathlib import Path
 
 import pytest
@@ -32,22 +31,7 @@ def _all_cases():
     return params
 
 
-@pytest.fixture(scope="module")
-def modem_address():
-    """Start the simulator in a background thread on an OS-chosen free port.
 
-    Port 0 = 'pick any free port', which avoids conflicts. Teardown (after yield)
-    shuts the server down cleanly.
-    """
-    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), ATHandler)
-    server.daemon_threads = True
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield server.server_address            # (host, port)
-    finally:
-        server.shutdown()
-        server.server_close()
 
 
 @pytest.mark.parametrize("case", _all_cases())

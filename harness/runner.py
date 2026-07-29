@@ -30,6 +30,7 @@ class CaseResult:
     attempts: int = 1          # how many tries it actually took
     timed_out: bool = False    # did the final attempt end in a timeout?
     duration_ms: float = 0.0      # how long the case took (seconds) (all attempts)
+    harness_error: str = ""      # set when the failure is on OUR side, not the device
     reason: str = ""           # why it failed (empty if it passed)
 
 
@@ -47,16 +48,26 @@ def _check(case, response: str):
 
 
 def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
-    """Run one case: preconditions, then send-and-check with retries + backoff."""
+    """Run one case with retries; separate device faults, timeouts, and OUR errors."""
     start = time.monotonic()
     timeout = case.timeout_ms / 1000.0
     max_attempts = case.retries + 1
 
+    def _elapsed_ms():
+        return (time.monotonic() - start) * 1000
+
+    # Preconditions (best effort). A non-timeout error here is on our side.
     for pre in case.precondition:
         try:
             transport.send(pre, timeout=timeout)
         except TimeoutError:
             log.warning("case=%r precondition %r timed out", case.name, pre)
+        except Exception as e:
+            log.error("case=%r precondition %r errored: %s", case.name, pre, e)
+            return CaseResult(case.name, False, case.send, "", attempts=1,
+                              harness_error=f"{type(e).__name__}: {e}",
+                              duration_ms=_elapsed_ms(),
+                              reason=f"precondition error: {e}")
 
     last_response, last_reason, timed_out = "", "", False
 
@@ -69,24 +80,26 @@ def run_case(case, transport, backoff_base: float = 0.05) -> CaseResult:
             log.info("case=%r attempt=%d/%d sent=%r passed=%s",
                      case.name, attempt, max_attempts, case.send, passed)
             if passed:
-                return CaseResult(
-                    case.name, True, case.send, response, attempts=attempt,
-                    duration_ms=(time.monotonic() - start) * 1000,
-                )
-        except TimeoutError as e:
+                return CaseResult(case.name, True, case.send, response,
+                                  attempts=attempt, duration_ms=_elapsed_ms())
+        except TimeoutError:
             timed_out = True
-            last_response, last_reason = "", str(e)
+            last_response, last_reason = "", f"timed out after {timeout:.2f}s"
             log.warning("case=%r attempt=%d/%d TIMEOUT sent=%r",
                         case.name, attempt, max_attempts, case.send)
+        except Exception as e:
+            # Non-timeout error = OUR side (connection/bug). Don't retry.
+            log.error("case=%r HARNESS ERROR sent=%r: %s", case.name, case.send, e)
+            return CaseResult(case.name, False, case.send, "", attempts=attempt,
+                              harness_error=f"{type(e).__name__}: {e}",
+                              duration_ms=_elapsed_ms(),
+                              reason=f"{type(e).__name__}: {e}")
 
         if attempt < max_attempts:
             time.sleep(backoff_base * (2 ** (attempt - 1)))
 
-    return CaseResult(
-        case.name, False, case.send, last_response, attempts=max_attempts,
-        timed_out=timed_out, duration_ms=(time.monotonic() - start) * 1000,
-        reason=last_reason,
-    )
+    return CaseResult(case.name, False, case.send, last_response, attempts=max_attempts,
+                      timed_out=timed_out, duration_ms=_elapsed_ms(), reason=last_reason)
 
 
 def run_plan(plan, transport):

@@ -719,6 +719,64 @@ harness learn to tell a device fault from a timeout from a harness fault.
 
 ---
 
+## Day 13 — Fault classification and measuring a classifier
+
+### The concepts
+
+**1. Why classify.** When a conformance test fails, the lab's first question is "is
+it the device or our setup?" A harness that separates **device fault** from
+**harness fault** is far more useful than one that just says "failed" — it directs
+the fix to the right team and preserves trust in the rig.
+
+**2. The four labels + ordered rules.** PASS → HARNESS_FAULT (we recorded an
+our-side error) → TIMEOUT (no response in window) → DEVICE_FAULT (reachable but
+wrong). Order matters; each check is a clean signal, not a guess.
+
+**3. Our-error vs device-behavior.** The runner now catches non-timeout exceptions
+(e.g. connection refused) and records a `harness_error`. `TimeoutError` = the device
+didn't answer; a connection error = we couldn't reach it. Same surface, opposite
+blame.
+
+**4. Measuring a classifier.** Test it on KNOWN faults (ground truth): inject a
+fault, so we know the true label; classify; compute accuracy = correct/total. Same
+idea as evaluating any classifier on a labeled set. Turns "I built a classifier"
+into "I measured it at X% across N scenarios."
+
+### Interview flashcards — Day 13
+
+- **Q: A conformance test fails — how does your harness decide whose fault it is?**
+  A: Rule-based, in order: if we recorded an error on our own side it's a harness
+  fault; if there was no response in the window it's a timeout; if the device
+  answered but wrong, it's a device fault; otherwise it passed.
+
+- **Q: Why does the device-vs-harness distinction matter?**
+  A: It sends the fix to the right place. Blaming the device for a loose cable or a
+  bad test script wastes time and erodes trust in the harness.
+
+- **Q: Give a device fault vs a harness fault.**
+  A: Device: the modem returns garbage or the wrong registration state. Harness: the
+  test can't even connect to the modem, or a bug in my runner throws — that's on us.
+
+- **Q: How do you know your classifier is accurate?**
+  A: I run scenarios where I injected the fault myself, so I know the true label,
+  then measure how often the classifier agrees — a classification-accuracy number
+  over a labeled set.
+
+- **Q: How do you tell a timeout from a device fault?**
+  A: A timeout is no response before the deadline (a `TimeoutError`); a device fault
+  is a response that arrived but didn't match. Different signals, different labels.
+
+### Design decisions to be able to defend (Day 13)
+
+- **Rule-based classifier with ordered checks** — transparent and defensible.
+- **`harness_error` signal** separating our-side errors from device behavior.
+- **Accuracy measured on labeled injected faults** (ground truth) — the headline
+  metric.
+- **Classification folded into the JSON report** (`by_category`) for Day 14's
+  rendering.
+
+---
+
 ## General learning tips (kept running)
 
 - **Explain it out loud.** After each file, close the editor and narrate what it
@@ -736,6 +794,6 @@ harness learn to tell a device fault from a timeout from a harness fault.
 
 ---
 
-*Appended per day. Next up (Day 13): the headline — the harness CLASSIFIES each
-failure (device fault vs timeout vs harness fault) and measures its own
-classification accuracy. That's the number the resume is built around.*
+*Appended per day. Next up (Day 14): turn the results into a polished report — JUnit
+XML (for CI) and an HTML conformance report showing pass/fail, the fault category per
+failure, and the run metrics.*

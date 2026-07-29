@@ -9,6 +9,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
+from harness.classifier import classify
 
 
 def build_summary(results, plan_name: str = "all") -> dict:
@@ -17,9 +18,19 @@ def build_summary(results, plan_name: str = "all") -> dict:
     passed = sum(1 for r in results if r.passed)
     failed = total - passed
     timed_out = sum(1 for r in results if r.timed_out)
-    total_retries = sum(r.attempts - 1 for r in results)   # attempts beyond the first
+    total_retries = sum(r.attempts - 1 for r in results)
     total_duration_ms = sum(r.duration_ms for r in results)
     pass_rate = (passed / total * 100) if total else 0.0
+
+    # Classify every case and tag it; also count categories.
+    by_category = {}
+    cases_out = []
+    for r in results:
+        category = classify(r).value
+        by_category[category] = by_category.get(category, 0) + 1
+        row = asdict(r)
+        row["category"] = category
+        cases_out.append(row)
 
     return {
         "plan": plan_name,
@@ -32,8 +43,9 @@ def build_summary(results, plan_name: str = "all") -> dict:
             "total_retries": total_retries,
             "pass_rate_pct": round(pass_rate, 1),
             "total_duration_ms": round(total_duration_ms, 2),
+            "by_category": by_category,
         },
-        "cases": [asdict(r) for r in results],   # per-case detail for the report
+        "cases": cases_out,
     }
 
 

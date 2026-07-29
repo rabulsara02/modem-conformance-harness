@@ -14,7 +14,11 @@ single most on-topic skill for validation roles.
 
 ---
 
+
+
 ## Background knowledge (read before you build)
+
+
 
 ### 1. Fault injection / chaos engineering
 
@@ -28,12 +32,14 @@ failures, not just confirm the happy path" is a standout interview line.
 
 ### 2. The fault taxonomy (each maps to a real modem failure)
 
-| Fault | What the simulator does | Real-world analog |
-|---|---|---|
-| `delay` | waits several seconds, then answers correctly | slow/overloaded firmware |
-| `malformed` | returns garbled, non-conforming bytes | corrupted UART/serial data |
-| `dropout` | sends nothing and closes the connection | modem crash / unplugged cable |
-| `wrongstate` | answers `OK` to everything, even errors | buggy firmware that lies about success |
+
+| Fault        | What the simulator does                       | Real-world analog                      |
+| ------------ | --------------------------------------------- | -------------------------------------- |
+| `delay`      | waits several seconds, then answers correctly | slow/overloaded firmware               |
+| `malformed`  | returns garbled, non-conforming bytes         | corrupted UART/serial data             |
+| `dropout`    | sends nothing and closes the connection       | modem crash / unplugged cable          |
+| `wrongstate` | answers `OK` to everything, even errors       | buggy firmware that lies about success |
+
 
 These aren't random — each is a failure mode real hardware actually exhibits, and
 each produces a *different observable* the harness must interpret (Day 13).
@@ -60,7 +66,7 @@ handling" trick as echo), so `AT+FAULT=delay` itself returns a prompt `OK` — o
 
 Your simulator-server fixture currently lives in `test_integration.py`, but the new
 fault tests need it too. pytest automatically loads fixtures from a file named
-**`conftest.py`**, making them available to every test file without importing.
+`conftest.py`, making them available to every test file without importing.
 Moving the fixture there is the idiomatic way to share it.
 
 ### 6. This sets up fault CLASSIFICATION (the resume feature)
@@ -73,6 +79,8 @@ can generate the faults on demand.
 
 ---
 
+
+
 ## Part A — Add the fault mode to the simulator's state + control command
 
 Edit `simulator/commands.py`.
@@ -83,7 +91,7 @@ Edit `simulator/commands.py`.
 from simulator.faults import FAULT_MODES
 ```
 
-**2. Add a `fault_mode` field to `ModemState`** (alongside the others):
+**2. Add a** `fault_mode` **field to** `ModemState` (alongside the others):
 
 ```python
     pdp_contexts: dict = field(default_factory=dict)
@@ -91,7 +99,7 @@ from simulator.faults import FAULT_MODES
     reg_state: RegState = field(default=RegState.NOT_REGISTERED)
 ```
 
-**3. Add the `AT+FAULT` handler** (with the other `_cmd_*` handlers):
+**3. Add the** `AT+FAULT` **handler** (with the other `_cmd_`* handlers):
 
 ```python
 def _cmd_fault(state, form, value):
@@ -107,7 +115,7 @@ def _cmd_fault(state, form, value):
     return ERROR
 ```
 
-**4. Register it in `EXTENDED_COMMANDS`:**
+**4. Register it in** `EXTENDED_COMMANDS`**:**
 
 ```python
     "CGDCONT": _cmd_cgdcont,
@@ -118,6 +126,8 @@ def _cmd_fault(state, form, value):
 - [ ] `commands.py` updated (import, `fault_mode` field, handler, dispatch entry).
 
 ---
+
+
 
 ## Part B — The faults module
 
@@ -169,18 +179,20 @@ def apply_fault(mode: str, body: str, *, delay_s: float = 3.0):
 
 ---
 
+
+
 ## Part C — Apply faults in the server (the one allowed server edit)
 
 Edit `simulator/server.py`.
 
-**1. Import `apply_fault`** (with the other imports):
+**1. Import** `apply_fault` (with the other imports):
 
 ```python
 from simulator.commands import ModemState, handle_command
 from simulator.faults import apply_fault
 ```
 
-**2. Update the body of the `for raw in self.rfile:` loop.** Replace everything from
+**2. Update the body of the** `for raw in self.rfile:` **loop.** Replace everything from
 `echo_before = state.echo` down to the `log.info(... latency ...)` line with:
 
 ```python
@@ -213,6 +225,8 @@ from simulator.faults import apply_fault
 
 ---
 
+
+
 ## Part D — Watch each fault by hand
 
 Start the simulator (`python -m simulator.server`) and connect
@@ -237,14 +251,16 @@ AT                   -> (connection closes; nc exits)
 ```
 
 - ✅ *Worked when:* each mode produces its distinct misbehavior, and `AT+FAULT=none`
-  restores honest behavior. Notice the fault-setting command itself always answers
-  promptly and correctly.
+restores honest behavior. Notice the fault-setting command itself always answers
+promptly and correctly.
 
 ---
 
+
+
 ## Part E — Move the server fixture to conftest.py + add fault tests
 
-**1. Create `conftest.py`** at the repo root and move the `modem_address` fixture
+**1. Create** `conftest.py` at the repo root and move the `modem_address` fixture
 there (cut it from `test_integration.py`):
 
 ```python
@@ -274,11 +290,11 @@ def modem_address():
         server.server_close()
 ```
 
-**2. In `test_integration.py`, delete the `modem_address` fixture** (and its now-unused
+**2. In** `test_integration.py`**, delete the** `modem_address` **fixture** (and its now-unused
 `socketserver`/`threading`/`ATHandler` imports). Keep everything else — the tests
 still get `modem_address` automatically from `conftest.py`.
 
-**3. Create `test_faults.py`** at the repo root:
+**3. Create** `test_faults.py` at the repo root:
 
 ```python
 """
@@ -366,9 +382,11 @@ pytest
 ```
 
 - ✅ *Worked when:* all pass — 66 + 4 fault tests + 2 unit tests = **72 passed**.
-  (`test_delay_causes_a_timeout` takes ~0.5s; that's the timeout firing.)
+(`test_delay_causes_a_timeout` takes ~0.5s; that's the timeout firing.)
 
 ---
+
+
 
 ## Part F — Docker sanity + push
 
@@ -380,32 +398,44 @@ git push
 ```
 
 - ✅ **DAY 12 IS DONE when:** CI is green with 72 tests, and you can drive each fault
-  mode by hand and see the simulator misbehave.
+mode by hand and see the simulator misbehave.
 
 ---
+
+
 
 ## If something breaks
 
-- **`ImportError: cannot import name 'FAULT_MODES'`:** create `simulator/faults.py`
-  (Part B) before editing `commands.py`, or check the module name/spelling.
-- **`AT+FAULT=delay` itself hangs:** you applied the fault using the *current*
-  `state.fault_mode` instead of `fault_before`. Capture the mode BEFORE
-  `handle_command` so the control command stays faithful.
-- **`test_delay_causes_a_timeout` doesn't raise:** the client timeout (0.5s) must be
-  shorter than the server delay (3s). Confirm `TcpTransport(..., timeout=0.5)`.
+- `ImportError: cannot import name 'FAULT_MODES'`**:** create `simulator/faults.py`
+(Part B) before editing `commands.py`, or check the module name/spelling.
+- `AT+FAULT=delay` **itself hangs:** you applied the fault using the *current*
+`state.fault_mode` instead of `fault_before`. Capture the mode BEFORE
+`handle_command` so the control command stays faithful.
+- `test_delay_causes_a_timeout` **doesn't raise:** the client timeout (0.5s) must be
+shorter than the server delay (3s). Confirm `TcpTransport(..., timeout=0.5)`.
 - **Fixture not found after the move:** `conftest.py` must be at the repo root (same
-  level as the test files) and named exactly `conftest.py`; don't import it.
+level as the test files) and named exactly `conftest.py`; don't import it.
 - **A normal (non-fault) test broke:** make sure the server still sends normally when
-  `fault_before == "none"` — `apply_fault` returns `(body, False)` in that case.
+`fault_before == "none"` — `apply_fault` returns `(body, False)` in that case.
 - **CI red, local green:** confirm `faults.py`, the edited `commands.py`/`server.py`,
-  `conftest.py`, `test_faults.py`, and `test_simulator.py` were all committed
-  (`git add -A`).
+`conftest.py`, `test_faults.py`, and `test_simulator.py` were all committed
+(`git add -A`).
 
 ---
 
+
+
 ## Progress log (updated as we go)
 
-*(Fill in as you work through today.)*
+- ✅ **DAY 12 COMPLETE.** Added fault injection: `faults.py` with 4 modes, the
+simulator-only `AT+FAULT` hook, and the one sanctioned `server.py` edit to apply
+faults at the boundary (using `fault_before`). Moved the server fixture to
+`conftest.py`. 72 tests green in Docker + CI; all 4 faults verified by hand.
+- **Debugging saga (great interview material):** faults "not working" turned out to
+be (1) a stale server holding the port and then (2) the `server.py` fault edits not
+saved to disk. Diagnosed with `pytest` (fresh in-process server) + noticing the
+live *log format* didn't match the latest code. Lesson: when behavior ≠ code,
+first confirm you're running the code you think you are.
 
 ---
 
